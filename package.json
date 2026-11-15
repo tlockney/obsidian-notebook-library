@@ -1,17 +1,30 @@
 {
-  "name": "@ganymede-ui/obsidian",
-  "version": "0.0.0",
+  "name": "obsidian-notebooks",
+  "version": "0.0.1",
   "private": true,
   "type": "module",
   "license": "MIT",
-  "description": "A read-only Obsidian plugin that opens .ipynb notebooks in a vault (spike, #636).",
+  "description": "An Obsidian plugin that shows Jupyter notebooks (.ipynb) in a vault, read-only.",
   "scripts": {
-    "build": "vite build"
+    "build": "vite build",
+    "test": "vitest run",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.node.json",
+    "check": "npm run lint && npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
     "marked": "17.0.6"
   },
   "devDependencies": {
-    "obsidian": "1.14.4"
+    "@eslint/js": "10.0.1",
+    "@types/node": "26.6.6",
+    "eslint": "10.14.0",
+    "globals": "17.14.0",
+    "jsdom": "31.0.0",
+    "obsidian": "1.14.4",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.72.1",
+    "vite": "8.3.6",
+    "vitest": "5.1.0"
   }
 }

@@ -2,19 +2,20 @@
 
 A read-only [Obsidian](https://obsidian.md) plugin that opens `.ipynb`
 notebooks in a vault, on desktop and mobile (iPad, iPhone). The vault
-becomes a notebook library; Ganymede stays the runtime. This is a spike
-for [#636](https://github.com/tlockney/ganymede-ui/issues/636). It is not
-published to Obsidian's plugin directory and is not part of the app or
-the page.
+becomes a notebook library. It started as a spike in
+[ganymede-ui#636](https://github.com/tlockney/ganymede-ui/issues/636) and
+moved here with its history; [docs/history.md](docs/history.md) is the
+design log from that spike. It is not yet published to Obsidian's plugin
+directory.
 
 ## Build
 
 ```sh
 npm ci
-npm run build -w @ganymede-ui/obsidian
+npm run check   # lint, type-check, tests, build
 ```
 
-This writes `packages/obsidian/dist/` with `main.js`, `manifest.json` and
+This writes `dist/` with `main.js`, `manifest.json` and
 `styles.css`.
 
 ## Install
