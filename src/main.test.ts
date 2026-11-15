@@ -114,6 +114,34 @@ describe('NotebookLibraryPlugin', () => {
     expect(plugin.currentNotebookView()).toBeNull();
   });
 
+  it('remembers the active view when it renders, for when the outline takes focus', async () => {
+    const { app, workspace, leaves } = fakeApp();
+    const plugin = await load(app);
+    const a = Object.create(NotebookView.prototype) as NotebookView;
+    const b = Object.create(NotebookView.prototype) as NotebookView;
+    leaves['notebook-library-view'] = [{ view: a }, { view: b }];
+    workspace.getActiveViewOfType.mockReturnValue(b);
+    plugin.onRendered(b);
+    workspace.getActiveViewOfType.mockReturnValue(null);
+    expect(plugin.currentNotebookView()).toBe(b);
+  });
+
+  it('on an actions-only save, refreshes the header actions and does not redraw', async () => {
+    const { app, leaves } = fakeApp();
+    const plugin = await load(app);
+    const view = Object.create(NotebookView.prototype) as NotebookView;
+    view.refresh = vi.fn();
+    view.refreshActions = vi.fn();
+    leaves['notebook-library-view'] = [{ view }];
+    const embed = { render: vi.fn(async () => {}) };
+    plugin.embeds.add(embed as never);
+    await plugin.saveSettings('actions');
+    expect(rec(plugin).data).toMatchObject({ foldCode: true });
+    expect(view.refreshActions).toHaveBeenCalledTimes(1);
+    expect(view.refresh).not.toHaveBeenCalled();
+    expect(embed.render).not.toHaveBeenCalled();
+  });
+
   it('redraws the outline when a notebook finishes rendering', async () => {
     const { app, leaves } = fakeApp();
     const plugin = await load(app);

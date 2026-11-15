@@ -166,3 +166,11 @@ do not state:
 - `window.open` with a custom scheme from Obsidian mobile.
 - Obsidian's reading-view embed placeholder being replaceable
   (`replaceChildren`) without Obsidian putting its content back.
+
+Pre-push review fixes: `applyOpen` now sets or clears `open` from the
+captured state (a cell the reader collapsed stays collapsed with fold off),
+and the view ignores the captured state when the fold setting changed since
+the last render. Text settings save 500 ms after the last keystroke (and on
+closing the tab); the custom URL save only re-decides header actions. A
+failed render clears the view's notebook model, so the outline and pending
+targets don't act on the old file.

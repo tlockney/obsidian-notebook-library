@@ -51,8 +51,14 @@ export default class NotebookLibraryPlugin extends Plugin {
     return (this.highlight ??= prismHighlighter());
   }
 
-  async saveSettings(): Promise<void> {
+  async saveSettings(scope?: 'actions'): Promise<void> {
     await this.saveData(this.settings);
+    if (scope === 'actions') {
+      for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE)) {
+        if (leaf.view instanceof NotebookView) leaf.view.refreshActions();
+      }
+      return;
+    }
     for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE)) {
       if (leaf.view instanceof NotebookView) leaf.view.refresh();
     }

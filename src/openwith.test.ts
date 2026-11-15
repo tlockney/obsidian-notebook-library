@@ -57,6 +57,12 @@ describe('validateUrlTemplate', () => {
     ['1app:x', 'starts with a digit'],
     ['myapp://x?{nope}', 'unknown placeholder'],
     ['myapp://x y', 'space in the template'],
+    ['myapp://a\tb', 'tab in the template'],
+    ['myapp:// x', 'space after the scheme'],
+    ['myapp://a\nb', 'newline in the template'],
+    ['myapp://a\u0000b', 'NUL in the template'],
+    ['myapp://a\u007fb', 'DEL in the template'],
+    ['myapp://a\u00a0b', 'no-break space in the template'],
   ])('rejects %j (%s)', t => {
     expect(validateUrlTemplate(t).ok).toBe(false);
   });

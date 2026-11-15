@@ -171,8 +171,18 @@ describe('NotebookIndex.search', () => {
     expect(hits[0].score).toBeGreaterThan(hits[1].score);
     const heading = idx.search('regression', { outputs: true });
     expect(heading[0].cell.id).toBe('intro');
-    const [plain] = idx.search('fit', { outputs: true });
-    expect(heading[0].score).toBeGreaterThan(plain.score - 1);
+  });
+
+  it('adds exactly 4 for a word in a heading of the cell, and 10 for one in the file name', () => {
+    const idx = new NotebookIndex();
+    idx.set('x.ipynb', notebook([md('# apple', 'h'), md('apple pie', 'p')]));
+    const hits = idx.search('apple', { outputs: false });
+    const by = Object.fromEntries(hits.map(h => [h.cell.id, h.score]));
+    expect(by).toEqual({ h: 1 + 4, p: 1 });
+    idx.set('apple.ipynb', notebook([md('apple', 'n')]));
+    expect(idx.search('apple', { outputs: false }).find(h => h.cell.id === 'n')!.score).toBe(
+      1 + 10,
+    );
   });
 
   it('ranks more occurrences higher, capped, and breaks ties by path then cell order', () => {

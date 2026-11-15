@@ -260,7 +260,7 @@ export function captureOpen(root: ParentNode): OpenState[] {
 }
 
 /**
- * Re-expand the code cells `captureOpen` saw open. A cell with an id is
+ * Restore the open or closed state `captureOpen` saw. A cell with an id is
  * matched by id, so inserting a cell above doesn't move the state; a cell
  * without one is matched by position (against states that also had no id).
  */
@@ -269,7 +269,9 @@ export function applyOpen(root: ParentNode, state: OpenState[]): void {
   for (const s of state) if (s.id) byId.set(s.id, s.open);
   Array.from(root.querySelectorAll('details.nbl-code')).forEach((d, i) => {
     const id = d.getAttribute('data-cell-id');
-    const open = id ? byId.get(id) : state[i] && !state[i].id ? state[i].open : false;
-    if (open) d.setAttribute('open', '');
+    const open = id ? byId.get(id) : state[i] && !state[i].id ? state[i].open : undefined;
+    // A cell the state doesn't know keeps the default; one it knows is set
+    // either way, so a cell the reader collapsed stays collapsed with fold off.
+    if (open !== undefined) d.toggleAttribute('open', open);
   });
 }

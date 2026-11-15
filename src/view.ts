@@ -36,6 +36,9 @@ export class NotebookView extends FileView {
   private flashTimer: ReturnType<typeof setTimeout> | undefined;
   private openAction: HTMLElement | undefined;
   private nb: Notebook | null = null;
+  // The fold setting of the last render: when it changes, the reader's own
+  // open and closed cells no longer apply.
+  private renderedFold: boolean | null = null;
   // A cell to scroll to once the notebook is rendered (state can arrive first).
   private pending: Target | null = null;
 
@@ -79,7 +82,7 @@ export class NotebookView extends FileView {
       }),
     );
     this.addAction('code', 'Show/hide all code', () => this.toggleCode());
-    this.refreshOpenAction();
+    this.refreshActions();
   }
 
   onunload(): void {
@@ -113,7 +116,7 @@ export class NotebookView extends FileView {
 
   /** Settings changed: draw again and re-decide the external action. */
   refresh(): void {
-    this.refreshOpenAction();
+    this.refreshActions();
     if (this.file) void this.render(this.file);
   }
 
@@ -158,7 +161,7 @@ export class NotebookView extends FileView {
   }
 
   /** The header action follows the "Open with" setting, so it is replaced when that changes. */
-  private refreshOpenAction(): void {
+  refreshActions(): void {
     this.openAction?.remove();
     this.openAction = undefined;
     const action = resolveOpenAction(this.host.settings, this.openEnv());
@@ -217,7 +220,8 @@ export class NotebookView extends FileView {
         header: notebookHeader(nb, file.basename),
       });
       // Keep the code cells the reader expanded.
-      applyOpen(staging, captureOpen(root));
+      applyOpen(staging, this.renderedFold === settings.foldCode ? captureOpen(root) : []);
+      this.renderedFold = settings.foldCode;
       // "Readable line length" is a vault setting that isn't in the public typings.
       const getConfig = (this.app.vault as unknown as { getConfig?: (k: string) => unknown })
         .getConfig;

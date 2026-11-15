@@ -471,3 +471,38 @@ describe('renderNotebook options', () => {
     expect(root.querySelector('.nbl-title')!.textContent).toBe('T');
   });
 });
+
+describe('applyOpen sets both ways', () => {
+  const cell = (id: string | null): Notebook['cells'][number] => ({
+    type: 'code',
+    id,
+    source: 'x',
+    executionCount: null,
+    outputs: [],
+  });
+  const nbOf = (...ids: (string | null)[]): Notebook => ({
+    language: '',
+    meta: NO_META,
+    cells: ids.map(cell),
+  });
+  const opens = (root: ParentNode) =>
+    Array.from(root.querySelectorAll('details')).map(d => d.hasAttribute('open'));
+
+  it('closes a cell the reader collapsed when cells render open by default', () => {
+    const root = document.createElement('div');
+    renderNotebook(nbOf('a', 'b', null, null), root, undefined, { foldCode: false });
+    root.querySelectorAll('details')[0].removeAttribute('open');
+    root.querySelectorAll('details')[2].removeAttribute('open');
+    const next = document.createElement('div');
+    renderNotebook(nbOf('a', 'b', null, null), next, undefined, { foldCode: false });
+    applyOpen(next, captureOpen(root));
+    expect(opens(next)).toEqual([false, true, false, true]);
+  });
+
+  it('leaves a cell the state does not know at its default', () => {
+    const next = document.createElement('div');
+    renderNotebook(nbOf('new', 'a'), next, undefined, { foldCode: false });
+    applyOpen(next, [{ id: 'a', open: false }]);
+    expect(opens(next)).toEqual([true, false]);
+  });
+});

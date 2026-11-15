@@ -40,8 +40,13 @@ function setup(text: string | Promise<string> = NB) {
     },
     workspace: { getLeaf: () => ({ openFile }) },
     metadataCache: {
+      // Like Obsidian: any existing file resolves, whatever its type.
       getFirstLinkpathDest: (link: string) =>
-        link === 'nb.ipynb' || link === 'dir/nb.ipynb' ? file : null,
+        link === 'nb.ipynb' || link === 'dir/nb.ipynb'
+          ? file
+          : link === 'img.png' || link === 'note.md'
+            ? new TFile(link)
+            : null,
     },
   };
   const host: EmbedHost = {
@@ -256,10 +261,11 @@ describe('registerNotebookEmbeds', () => {
 
     it('leaves other embeds and unresolved notebooks alone', () => {
       const { el, children } = run(
-        '<div class="internal-embed" src="img.png">a</div><div class="internal-embed" src="missing.ipynb">b</div><div class="internal-embed">c</div>',
+        '<div class="internal-embed" src="img.png">a</div><div class="internal-embed" src="note.md#H">b</div><div class="internal-embed" src="missing.ipynb">c</div><div class="internal-embed">d</div>',
       );
       expect(children).toHaveLength(0);
-      expect(el.textContent).toBe('abc');
+      expect(el.textContent).toBe('abcd');
+      expect(el.querySelector('.is-loaded')).toBeNull();
     });
 
     it('renders several embeds in one note', () => {

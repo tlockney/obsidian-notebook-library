@@ -428,4 +428,20 @@ describe('cell ids and notebook metadata', () => {
       lastRun: Date.parse('2025-05-01T10:00:00.123Z'),
     });
   });
+
+  it('takes the latest run over all cells, whatever their order', () => {
+    const ran = (t: string) => ({
+      cell_type: 'code',
+      source: '',
+      metadata: { execution: { 'iopub.execute_input': t } },
+    });
+    const last = (...ts: string[]) => parseNotebook(nb(ts.map(ran))).meta.lastRun;
+    const [jan, feb, mar] = ['2025-01-01', '2025-02-01', '2025-03-01'].map(d =>
+      Date.parse(`${d}T00:00:00Z`),
+    );
+    expect(last('2025-03-01T00:00:00Z', '2025-01-01T00:00:00Z', '2025-02-01T00:00:00Z')).toBe(mar);
+    expect(last('2025-01-01T00:00:00Z', '2025-03-01T00:00:00Z', '2025-02-01T00:00:00Z')).toBe(mar);
+    expect(last('2025-02-01T00:00:00Z', '2025-01-01T00:00:00Z')).toBe(feb);
+    expect(last('2025-01-01T00:00:00Z')).toBe(jan);
+  });
 });

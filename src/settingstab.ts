@@ -6,9 +6,15 @@ import type { OpenWith, Settings } from './settings.ts';
 
 export interface SettingsHost extends Plugin {
   settings: Settings;
-  /** Save, and redraw open notebooks, embeds and header actions. */
-  saveSettings(): Promise<void>;
+  /**
+   * Save, and redraw open notebooks, embeds and header actions; or with
+   * 'actions', save and only re-decide the header actions.
+   */
+  saveSettings(scope?: 'actions'): Promise<void>;
 }
+
+/** Text fields save this long after the last keystroke, not on each one. */
+export const SAVE_DEBOUNCE_MS = 500;
 
 const OPEN_WITH_LABELS: Record<OpenWith, string> = {
   ganymede: 'Ganymede',
@@ -18,11 +24,36 @@ const OPEN_WITH_LABELS: Record<OpenWith, string> = {
 };
 
 export class NotebookSettingTab extends PluginSettingTab {
+  private readonly pending = new Map<
+    string,
+    { timer: ReturnType<typeof setTimeout>; run: () => void }
+  >();
+
   constructor(
     app: App,
     private readonly plugin: SettingsHost,
   ) {
     super(app, plugin);
+  }
+
+  /** Run `run` after a quiet time; a newer call for the same key replaces it. */
+  private later(key: string, run: () => void): void {
+    clearTimeout(this.pending.get(key)?.timer);
+    const timer = setTimeout(() => {
+      this.pending.delete(key);
+      run();
+    }, SAVE_DEBOUNCE_MS);
+    this.pending.set(key, { timer, run });
+  }
+
+  /** Closing the tab saves what is still waiting. */
+  hide(): void {
+    const waiting = [...this.pending.values()];
+    this.pending.clear();
+    for (const w of waiting) {
+      clearTimeout(w.timer);
+      w.run();
+    }
   }
 
   display(): void {
@@ -56,11 +87,11 @@ export class NotebookSettingTab extends PluginSettingTab {
         'Lines of text, stream and error output shown before "Show more". 0 shows everything.',
       )
       .addText(t =>
-        t.setValue(String(s.maxOutputLines)).onChange(async v => {
+        t.setValue(String(s.maxOutputLines)).onChange(v => {
           const n = Number(v.trim());
           if (v.trim() === '' || !Number.isInteger(n) || n < 0 || n > 100000) return;
           s.maxOutputLines = n;
-          await this.plugin.saveSettings();
+          this.later('maxOutputLines', () => void this.plugin.saveSettings());
         }),
       );
 
@@ -99,9 +130,10 @@ export class NotebookSettingTab extends PluginSettingTab {
           t
             .setPlaceholder('myapp://open?path={path}')
             .setValue(s.customUrl)
-            .onChange(async v => {
+            .onChange(v => {
               s.customUrl = v;
-              await this.plugin.saveSettings();
+              // Only the header actions depend on the template.
+              this.later('customUrl', () => void this.plugin.saveSettings('actions'));
               const r = validateUrlTemplate(v);
               problem.textContent = r.ok ? '' : r.reason;
             }),

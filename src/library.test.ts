@@ -172,6 +172,18 @@ describe('NotebookLibrary events', () => {
     expect(s.search('old')).toEqual([]);
   });
 
+  it('drops the entry when a later read of the file fails, rather than serve stale text', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const s = setup({ 'a.ipynb': nb('alpha') });
+    await s.library.ready();
+    expect(s.search('alpha')).toEqual(['a.ipynb']);
+    s.texts.delete('a.ipynb');
+    s.handlers.modify(s.files.get('a.ipynb')!);
+    await vi.advanceTimersByTimeAsync(INDEX_DEBOUNCE_MS);
+    expect(s.search('alpha')).toEqual([]);
+    expect(s.library.index.has('a.ipynb')).toBe(false);
+  });
+
   it('removes a deleted notebook, and cancels its pending modify', async () => {
     const s = setup({ 'a.ipynb': nb('alpha') });
     await s.library.ready();

@@ -47,7 +47,11 @@ function deferred<T>() {
 
 type Handler = (f: unknown) => void;
 
-function setup(overrides: Partial<Settings> = {}, adapter: object = new FileSystemAdapter()) {
+function setup(
+  overrides: Partial<Settings> = {},
+  adapter: object = new FileSystemAdapter(),
+  path = 'a.ipynb',
+) {
   const handlers: Record<string, Handler> = {};
   const cachedRead = vi.fn<(f: TFile) => Promise<string>>();
   const app = {
@@ -64,7 +68,7 @@ function setup(overrides: Partial<Settings> = {}, adapter: object = new FileSyst
   const host = { settings: { ...DEFAULT_SETTINGS, ...overrides }, onRendered: vi.fn() };
   const view = new NotebookView({ app } as never, host);
   view.onload();
-  const file = tfile('a.ipynb');
+  const file = tfile(path);
   view.file = file as never;
   return { view, file, cachedRead, handlers, host, app };
 }
@@ -393,5 +397,107 @@ describe('NotebookView open externally', () => {
     host.settings.openWith = 'off';
     view.refresh();
     expect(h.actions.at(-1)!.el.isConnected).toBe(false);
+  });
+});
+
+describe('NotebookView lifecycle', () => {
+  const cellEl = (view: NotebookView, i: number) =>
+    view.contentEl.querySelector(`[data-cell-index="${i}"]`) as HTMLElement;
+
+  it('forgets headings and targets when the file becomes unparseable, and tells the host', async () => {
+    const { view, file, cachedRead, host } = setup();
+    cachedRead.mockResolvedValue(richNotebook());
+    await view.onLoadFile(file as never);
+    expect(view.headings).toHaveLength(3);
+    host.onRendered.mockClear();
+    cachedRead.mockResolvedValue('{nope');
+    view.refresh();
+    await vi.waitFor(() =>
+      expect(view.contentEl.textContent).toContain('Cannot open this notebook'),
+    );
+    expect(view.headings).toEqual([]);
+    expect(host.onRendered).toHaveBeenCalledWith(view);
+    // A target for the old notebook has nothing to apply to: it waits, not scrolls.
+    view.setEphemeralState({ subpath: '#Results' });
+    cachedRead.mockResolvedValue(richNotebook());
+    view.refresh();
+    await vi.waitFor(() => expect(cellEl(view, 3)).not.toBeNull());
+    expect(cellEl(view, 3).classList.contains('nbl-flash')).toBe(true);
+  });
+
+  it('tells the host on unload, with no headings left', async () => {
+    const { view, file, cachedRead, host } = setup();
+    cachedRead.mockResolvedValue(richNotebook());
+    await view.onLoadFile(file as never);
+    host.onRendered.mockClear();
+    await view.onUnloadFile(file as never);
+    expect(host.onRendered).toHaveBeenCalledWith(view);
+    expect(view.headings).toEqual([]);
+  });
+
+  it('drops a waiting target on unload, so it does not scroll the next file', async () => {
+    const { view, file, cachedRead } = setup();
+    view.setEphemeralState({ subpath: '#Results' });
+    await view.onUnloadFile(file as never);
+    cachedRead.mockResolvedValue(richNotebook());
+    await view.onLoadFile(file as never);
+    expect(view.contentEl.querySelector('.nbl-flash')).toBeNull();
+  });
+
+  it.each([
+    ['onUnloadFile', (v: NotebookView, f: unknown) => v.onUnloadFile(f as never)],
+    ['onunload', (v: NotebookView) => v.onunload()],
+  ])('clears the highlight timer on %s', async (_n, close) => {
+    vi.useFakeTimers();
+    const { view, file, cachedRead } = setup();
+    cachedRead.mockResolvedValue(richNotebook());
+    await view.onLoadFile(file as never);
+    view.setEphemeralState({ subpath: '#Results' });
+    expect(vi.getTimerCount()).toBe(1);
+    await close(view, file);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('keeps a collapsed cell collapsed with fold off, and refolds when the setting changes', async () => {
+    const { view, file, cachedRead, host } = setup({ foldCode: false });
+    cachedRead.mockResolvedValue(richNotebook());
+    await view.onLoadFile(file as never);
+    const details = () => view.contentEl.querySelector('details')!;
+    expect(details().hasAttribute('open')).toBe(true);
+    details().removeAttribute('open');
+    view.refresh();
+    await vi.waitFor(() => expect(host.onRendered).toHaveBeenCalledTimes(2));
+    expect(details().hasAttribute('open')).toBe(false);
+    // The setting itself changed: the reader's earlier choice no longer applies.
+    host.settings.foldCode = true;
+    details().setAttribute('open', '');
+    view.refresh();
+    await vi.waitFor(() => expect(host.onRendered).toHaveBeenCalledTimes(3));
+    expect(details().hasAttribute('open')).toBe(false);
+    host.settings.foldCode = false;
+    view.refresh();
+    await vi.waitFor(() => expect(host.onRendered).toHaveBeenCalledTimes(4));
+    expect(details().hasAttribute('open')).toBe(true);
+  });
+
+  it('opens with the vault-relative path, not the file name, for a nested file', () => {
+    const fn = vi.fn();
+    const sys = setup({ openWith: 'system' }, new FileSystemAdapter(), 'dir/sub/a.ipynb');
+    (sys.app as unknown as { openWithDefaultApp: unknown }).openWithDefaultApp = fn;
+    sys.view.refresh();
+    h.actions.find(a => a.title === 'Open in default app')!.cb();
+    expect(fn).toHaveBeenCalledWith('dir/sub/a.ipynb');
+
+    h.actions.length = 0;
+    const spy = vi.spyOn(window, 'open').mockImplementation(() => null);
+    setup(
+      { openWith: 'custom', customUrl: 'x://{vaultPath}|{name}|{path}' },
+      new FileSystemAdapter(),
+      'dir/sub/a.ipynb',
+    );
+    h.actions.find(a => a.title === 'Open externally')!.cb();
+    expect(spy).toHaveBeenCalledWith(
+      'x://dir%2Fsub%2Fa.ipynb|a.ipynb|%2Fvault%2Fdir%2Fsub%2Fa.ipynb',
+    );
   });
 });

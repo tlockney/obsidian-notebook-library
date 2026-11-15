@@ -106,7 +106,7 @@ the notebook re-renders.
 | Search text outputs | on | Include outputs in search. |
 | Open with | Ganymede | See below. |
 
-Changing a setting redraws open notebooks and embeds.
+Changing a setting redraws open notebooks and embeds; text fields save 0.5 s after you stop typing, and the custom URL only updates the header action. Code cells you expanded or collapsed keep that state across a redraw, except when the fold setting itself changed.
 
 ### Open with
 
