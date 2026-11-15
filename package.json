@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "license": "MIT",
-  "description": "An Obsidian plugin that shows Jupyter notebooks (.ipynb) in a vault, read-only.",
+  "description": "An Obsidian plugin that turns the Jupyter notebooks (.ipynb) in a vault into a read-only, searchable library.",
   "scripts": {
     "build": "vite build",
     "test": "vitest run",

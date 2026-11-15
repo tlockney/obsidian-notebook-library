@@ -204,7 +204,7 @@ function mathOutside(text: string, hide: (m: string) => string): string {
   return text.replace(DISPLAY_MATH, hide).replace(INLINE_MATH, hide);
 }
 
-/** Turn placeholders in text nodes back into `span.ganymede-nb-math`. */
+/** Turn placeholders in text nodes back into `span.nbl-math`. */
 function restoreMath(root: HTMLElement, spans: string[]): void {
   if (!spans.length) return;
   const doc = root.ownerDocument;
@@ -222,7 +222,7 @@ function restoreMath(root: HTMLElement, spans: string[]): void {
         if (part) frag.appendChild(doc.createTextNode(part));
       } else if (spans[Number(part)] !== undefined) {
         const span = doc.createElement('span');
-        span.className = 'ganymede-nb-math';
+        span.className = 'nbl-math';
         span.textContent = spans[Number(part)];
         frag.appendChild(span);
       }
@@ -246,7 +246,7 @@ export function renderSafeMarkdown(
   const parsed = new DOMParser().parseFromString(html, 'text/html');
   const doc = el.ownerDocument;
   const wrap = doc.createElement('div');
-  wrap.className = 'markdown-rendered ganymede-nb-markdown';
+  wrap.className = 'markdown-rendered nbl-markdown';
   copyChildren(parsed.body, wrap, doc, attachments);
   restoreMath(wrap, spans);
   el.appendChild(wrap);

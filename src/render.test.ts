@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { parseNotebook } from './notebook.ts';
-import type { Notebook } from './notebook.ts';
+import type { Notebook, NotebookMeta } from './notebook.ts';
+
+const NO_META: NotebookMeta = { title: null, kernel: null, tags: [], lastRun: null };
 import {
   applyOpen,
   captureOpen,
@@ -14,6 +16,7 @@ import type { Highlight } from './render.ts';
 function codeNb(output: unknown, source = 'x'): Notebook {
   return {
     language: 'python',
+    meta: NO_META,
     cells: [{ type: 'code', id: null, source, executionCount: 3, outputs: [output as never] }],
   };
 }
@@ -96,13 +99,13 @@ describe('renderNotebook', () => {
       }),
     );
     const { root } = await draw(nb);
-    const pres = [...root.querySelectorAll('.ganymede-nb-output pre')];
+    const pres = [...root.querySelectorAll('.nbl-output pre')];
     expect(pres).toHaveLength(3);
     expect(pres[0].textContent).toBe('<b>x</b>');
     expect(pres[1].textContent).toBe('<s>t</s>');
     expect(pres[2].textContent).toBe('<img src=x onerror=1>');
     expect(root.querySelector('b, i, u, s')).toBeNull();
-    expect(root.querySelector('.ganymede-nb-output img')).toBeNull();
+    expect(root.querySelector('.nbl-output img')).toBeNull();
   });
 
   it('uses images only for whitelisted bitmap mimes', async () => {
@@ -135,8 +138,9 @@ describe('renderNotebook', () => {
   it('renders markdown cells and outputs itself; code never reaches a markdown renderer', async () => {
     const nb: Notebook = {
       language: 'python',
+      meta: NO_META,
       cells: [
-        { type: 'markdown', source: '# Title', attachments: {} },
+        { type: 'markdown', id: null, source: '# Title', attachments: {} },
         {
           type: 'code',
           id: null,
@@ -154,9 +158,11 @@ describe('renderNotebook', () => {
   it('resolves attachment: images in markdown cells, bitmaps only', async () => {
     const nb: Notebook = {
       language: '',
+      meta: NO_META,
       cells: [
         {
           type: 'markdown',
+          id: null,
           source: '![p](attachment:a.png) ![s](attachment:b.svg)',
           attachments: { 'a.png': 'data:image/png;base64,AAAA' },
         },
@@ -172,21 +178,19 @@ describe('renderNotebook', () => {
   it('renders a folded code cell with its source as literal text', async () => {
     const src = '<b>x</b> = 1 // </code></pre><script>1</script>';
     const { root } = await draw(codeNb({ kind: 'text', text: 'o', stderr: false }, src));
-    expect(root.querySelector('.ganymede-nb-prompt')).toBeNull();
-    const details = root.querySelector('details.ganymede-nb-code')!;
+    expect(root.querySelector('.nbl-prompt')).toBeNull();
+    const details = root.querySelector('details.nbl-code')!;
     expect(details.hasAttribute('open')).toBe(false);
     expect(details.querySelector('summary')!.textContent).toBe('Code [3]');
-    expect(details.querySelector('summary .ganymede-nb-count')!.textContent).toBe(' [3]');
-    const code = details.querySelector('.ganymede-nb-source.markdown-rendered > pre > code')!;
+    expect(details.querySelector('summary .nbl-count')!.textContent).toBe(' [3]');
+    const code = details.querySelector('.nbl-source.markdown-rendered > pre > code')!;
     expect(code.textContent).toBe(src);
     expect(code.className).toBe('language-python');
     expect(details.querySelector('b, script')).toBeNull();
     // Outputs stay visible: after the details, not inside it.
-    expect(details.querySelector('.ganymede-nb-output')).toBeNull();
-    expect(details.nextElementSibling!.classList.contains('ganymede-nb-output')).toBe(true);
-    expect(root.querySelector('.ganymede-nb')!.classList.contains('markdown-preview-view')).toBe(
-      true,
-    );
+    expect(details.querySelector('.nbl-output')).toBeNull();
+    expect(details.nextElementSibling!.classList.contains('nbl-output')).toBe(true);
+    expect(root.querySelector('.nbl')!.classList.contains('markdown-preview-view')).toBe(true);
   });
 
   it('hands the code element and language to the highlighter', async () => {
@@ -201,6 +205,7 @@ describe('renderNotebook', () => {
       const { root, hl } = await draw({
         ...codeNb({ kind: 'text', text: '', stderr: false }),
         language: l,
+        meta: NO_META,
       });
       return { cls: root.querySelector('code')!.className, called: hl.mock.calls.length };
     };
@@ -221,7 +226,7 @@ describe('renderNotebook', () => {
     const err = async (e: object) =>
       (
         await draw(codeNb({ kind: 'error', ename: '', evalue: '', traceback: '', ...e }))
-      ).root.querySelector('.ganymede-nb-error')!.textContent;
+      ).root.querySelector('.nbl-error')!.textContent;
     expect(await err({ ename: 'E', evalue: 'v', traceback: 'tb line\n' })).toBe('tb line');
     expect(await err({ ename: 'E', evalue: 'v' })).toBe('E: v');
     expect(await err({ evalue: 'only' })).toBe(': only');
@@ -231,6 +236,7 @@ describe('renderNotebook', () => {
   it('keeps expanded code cells open across a re-render', async () => {
     const nb: Notebook = {
       language: 'python',
+      meta: NO_META,
       cells: [1, 2, 3].map(n => ({
         type: 'code' as const,
         id: null,
@@ -270,7 +276,7 @@ describe('renderNotebook', () => {
       outputs: [],
     });
     const before = document.createElement('div');
-    renderNotebook({ language: '', cells: [cell('a'), cell('b')] }, before);
+    renderNotebook({ language: '', meta: NO_META, cells: [cell('a'), cell('b')] }, before);
     before.querySelectorAll('details')[1].setAttribute('open', '');
     const state = captureOpen(before);
     expect(state).toEqual([
@@ -279,7 +285,10 @@ describe('renderNotebook', () => {
     ]);
     expect(before.querySelectorAll('details')[1].getAttribute('data-cell-id')).toBe('b');
     const after = document.createElement('div');
-    renderNotebook({ language: '', cells: [cell('new'), cell('a'), cell('b')] }, after);
+    renderNotebook(
+      { language: '', meta: NO_META, cells: [cell('new'), cell('a'), cell('b')] },
+      after,
+    );
     applyOpen(after, state);
     expect([...after.querySelectorAll('details')].map(d => d.hasAttribute('open'))).toEqual([
       false,
@@ -296,7 +305,7 @@ describe('renderNotebook', () => {
   });
 
   it('shows a message for an empty notebook', async () => {
-    const { root } = await draw({ language: '', cells: [] });
+    const { root } = await draw({ language: '', meta: NO_META, cells: [] });
     expect(root.textContent).toContain('no cells');
   });
 });
@@ -330,14 +339,15 @@ describe('untrusted Markdown through renderNotebook', () => {
   it('a markdown cell', async () => {
     const { root } = await draw({
       language: '',
-      cells: [{ type: 'markdown', source: evil, attachments: {} }],
+      meta: NO_META,
+      cells: [{ type: 'markdown', id: null, source: evil, attachments: {} }],
     });
     expectClean(root);
   });
 
   it('a text/markdown output', async () => {
     const { root } = await draw(codeNb({ kind: 'markdown', markdown: evil }));
-    expectClean(root.querySelector('.ganymede-nb-output') as HTMLElement);
+    expectClean(root.querySelector('.nbl-output') as HTMLElement);
   });
 });
 
@@ -347,5 +357,117 @@ describe('renderError', () => {
     renderError(root, 'Bad <b>thing</b>');
     expect(root.textContent).toContain('Bad <b>thing</b>');
     expect(root.querySelector('b')).toBeNull();
+  });
+});
+
+describe('renderNotebook options', () => {
+  const text = (t: string) => ({ kind: 'text' as const, text: t, stderr: false });
+  const numbered = (n: number) => Array.from({ length: n }, (_, i) => `line ${i + 1}`).join('\n');
+
+  it('marks every cell with its index and id', async () => {
+    const nb: Notebook = {
+      language: '',
+      meta: NO_META,
+      cells: [
+        { type: 'markdown', id: 'm', source: 'x', attachments: {} },
+        { type: 'code', id: null, source: 'y', executionCount: null, outputs: [] },
+        { type: 'raw', id: 'r', source: 'z' },
+      ],
+    };
+    const { root } = await draw(nb);
+    const cells = Array.from(root.querySelectorAll('.nbl-cell'));
+    expect(cells.map(c => c.getAttribute('data-cell-index'))).toEqual(['0', '1', '2']);
+    expect(cells.map(c => c.getAttribute('data-cell-id'))).toEqual(['m', null, 'r']);
+  });
+
+  it('renders only the chosen cells, keeping their notebook indexes', () => {
+    const nb = parseNotebook(
+      JSON.stringify({
+        nbformat: 4,
+        cells: ['a', 'b', 'c'].map(s => ({ cell_type: 'markdown', source: s })),
+      }),
+    );
+    const root = document.createElement('div');
+    renderNotebook(nb, root, undefined, { cells: [1, 2] });
+    const cells = Array.from(root.querySelectorAll('.nbl-cell'));
+    expect(cells.map(c => [c.getAttribute('data-cell-index'), c.textContent!.trim()])).toEqual([
+      ['1', 'b'],
+      ['2', 'c'],
+    ]);
+  });
+
+  it('opens code cells when folding is off, and hides counts when asked', () => {
+    const root = document.createElement('div');
+    renderNotebook(codeNb(text('o')), root, undefined, { foldCode: false, showCounts: false });
+    const d = root.querySelector('details')!;
+    expect(d.hasAttribute('open')).toBe(true);
+    expect(d.querySelector('.nbl-count')).toBeNull();
+    const dflt = document.createElement('div');
+    renderNotebook(codeNb(text('o')), dflt);
+    expect(dflt.querySelector('details')!.hasAttribute('open')).toBe(false);
+    expect(dflt.querySelector('.nbl-count')!.textContent).toBe(' [3]');
+  });
+
+  it('caps a long text output and reveals the rest from a button', () => {
+    const root = document.createElement('div');
+    renderNotebook(codeNb(text(numbered(100))), root, undefined, { maxOutputLines: 40 });
+    const pre = root.querySelector('.nbl-output pre')!;
+    expect(pre.textContent!.split('\n')).toHaveLength(40);
+    const button = root.querySelector<HTMLButtonElement>('button.nbl-more')!;
+    expect(button.textContent).toBe('Show 60 more lines');
+    button.click();
+    expect(pre.textContent).toBe(numbered(100));
+    expect(root.querySelector('button.nbl-more')).toBeNull();
+  });
+
+  it('does not cap at exactly the limit, with 0, or by default', () => {
+    for (const [lines, max] of [
+      [40, 40],
+      [100, 0],
+      [100, undefined],
+    ] as const) {
+      const root = document.createElement('div');
+      renderNotebook(codeNb(text(numbered(lines))), root, undefined, { maxOutputLines: max });
+      expect(root.querySelector('button.nbl-more')).toBeNull();
+      expect(root.querySelector('.nbl-output pre')!.textContent!.split('\n')).toHaveLength(lines);
+    }
+  });
+
+  it('caps error output too, and keeps the button text free of notebook content', () => {
+    const root = document.createElement('div');
+    renderNotebook(
+      codeNb({ kind: 'error', ename: 'E', evalue: 'v', traceback: numbered(50) }),
+      root,
+      undefined,
+      { maxOutputLines: 5 },
+    );
+    expect(root.querySelector('pre.nbl-error')!.textContent!.split('\n')).toHaveLength(5);
+    expect(root.querySelector('button.nbl-more')!.textContent).toBe('Show 45 more lines');
+  });
+
+  it('puts notebook-supplied header text in textContent only', () => {
+    const root = document.createElement('div');
+    renderNotebook(codeNb(text('o')), root, undefined, {
+      header: {
+        title: '<img src=x onerror=alert(1)>',
+        kernel: '<script>1</script>',
+        lastRun: Date.parse('2025-01-01T00:00:00Z'),
+        tags: ['<i>t</i>'],
+      },
+    });
+    const header = root.querySelector('.nbl-header')!;
+    expect(header.querySelector('img, script, i')).toBeNull();
+    expect(header.querySelector('.nbl-title')!.textContent).toBe('<img src=x onerror=alert(1)>');
+    expect(header.querySelector('.nbl-tag')!.textContent).toBe('<i>t</i>');
+    expect(header.textContent).toContain('Kernel: <script>1</script>');
+  });
+
+  it('omits the facts row when the header has nothing but a title', () => {
+    const root = document.createElement('div');
+    renderNotebook(codeNb(text('o')), root, undefined, {
+      header: { title: 'T', kernel: null, lastRun: null, tags: [] },
+    });
+    expect(root.querySelector('.nbl-facts')).toBeNull();
+    expect(root.querySelector('.nbl-title')!.textContent).toBe('T');
   });
 });

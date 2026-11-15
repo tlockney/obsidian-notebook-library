@@ -42,7 +42,7 @@ attributes (http, https, mailto and `#` links; `data:` PNG, JPEG, GIF
 and WebP images). The trade-off is no wikilinks, embeds or callouts in
 notebook Markdown. Math (`$…$`, `$$…$$`, not in code) is swapped for
 placeholders before `marked` and restored as literal source in a
-`ganymede-nb-math` span, so `*` and `_` in it survive; it isn't typeset.
+`nbl-math` span, so `*` and `_` in it survive; it isn't typeset.
 `marked` 17.0.6, already in the lockfile through
 JupyterLab, is bundled into `main.js`.
 
@@ -79,3 +79,90 @@ file-close path, which the tests cover; they have no test of their own. Next: st
 Mac app at a vault folder and using it for a while (check Obsidian Sync's
 "Sync all other types" setting and its file size limit); step 3, search
 inside notebooks (a plugin index or Markdown summaries).
+
+## 2026-11-15, Notebook Library: search, links, embeds, outline, settings (obsidian-notebooks#1)
+
+The plugin is renamed **Notebook Library** (manifest id `notebook-library`,
+install path `.obsidian/plugins/notebook-library/`, CSS prefix `nbl-`,
+view type `notebook-library-view`). Ganymede is one "Open with" choice,
+not the brand. An install of the old `ganymede-notebooks` id is a
+different plugin to Obsidian: copy the new folder and disable the old one.
+
+**Model.** `parseNotebook` now keeps every cell's id (Markdown and raw as
+well as code) and a `meta` with title, kernel, tags and the latest
+execution time. Tags are strings from `metadata.tags` and from
+`metadata.ganymede.tags`; nothing in this repo's history or code defines a
+Ganymede metadata convention, so `ganymede.tags` is a guess at one and is
+read only when it is an array of strings. Cells in the DOM carry
+`data-cell-index` and `data-cell-id`, which search, links, the outline and
+embeds scroll by.
+
+**Search** (`search.ts`, `library.ts`, `searchmodal.ts`). `NotebookIndex`
+(pure) holds per-cell source and text outputs and answers queries: words
+split on whitespace, case-insensitive, all in one cell; score is
+occurrences (each word capped at 5) plus 10 per word in the file name and
+4 per word in a heading of the cell; ties by path then cell order. The
+snippet is cut around the earliest match and returned as matched and
+unmatched segments, which the modal builds with `textContent` and `<mark>`.
+`NotebookLibrary` reads files and follows create, modify (1 s debounce),
+delete and rename. Each path has a generation number, so a read that
+finishes after a newer change, a delete or a rename is dropped; a read
+also checks that the file is still at its path, because a folder delete or
+rename may not report the files inside. Events before the first build are
+ignored, since the build reads current state. The build runs once the
+workspace is ready on desktop and on the first search on mobile, yielding
+to the UI every 5 files; files over 20 MB are recorded and not read.
+Choosing a result opens the file with `eState` `{ notebookCell: { id,
+index } }`; the id wins over a stale index.
+
+**Links and embeds** (`outline.ts`, `embeds.ts`). `parseSubpath`,
+`selectCells` and `resolveTarget` are pure: `#Heading` (a section runs to
+the next Markdown cell with a heading of the same or a higher level),
+`#A#B`, `#^id`. The view applies a target after the render, so a target
+that arrives first (Obsidian can set state before `onLoadFile` finishes)
+waits, and a re-render does not scroll again. An embed is a
+`MarkdownRenderChild` that draws the selected cells with `renderNotebook`
+in a box with `max-height: 30em`, a link that opens the notebook at the
+same subpath, and a redraw on modify and on settings changes. Known
+limit: heading matching ignores case and the characters Obsidian strips
+from link text, but not other differences (for example inline math in a
+heading).
+
+**Outline** (`outlineview.ts`). A right-sidebar `ItemView` reading
+`NotebookView.headings`; the plugin tells it when a notebook renders, and
+it also redraws on `active-leaf-change` and `layout-change`. Heading
+extraction skips fenced code (a fence closes on the same character, at
+least as long) and does not read setext headings.
+
+**Settings** (`settings.ts`, `settingstab.ts`, `openwith.ts`). Saved data
+is merged field by field, so a mistyped value in `data.json` falls back to
+its default. The custom URL template is checked after trimming: a plain
+scheme token then `:`, no whitespace or control characters, not
+`javascript`, `data`, `file` or `vbscript`, and only known placeholders.
+Values are percent-encoded in one pass. Ganymede stays macOS desktop
+only; System default app and a custom URL with `{path}` need a
+file-system vault on desktop; a custom URL without `{path}` is offered on
+mobile. The header action is replaced when the setting changes.
+
+Not verified in a real Obsidian; only the typings and jsdom tests. These
+use APIs that are not in `obsidian.d.ts` 1.14.4 or behaviour the typings
+do not state:
+
+- `app.embedRegistry.registerExtension('ipynb', (ctx, file, subpath) =>
+  component)` and `unregisterExtension`: the factory's arguments, that
+  `ctx.containerEl` is the element to fill, and that Obsidian calls
+  `loadFile()` on the returned component (the embed also renders from
+  `onload`, once). Feature-detected; the fallback is a Markdown
+  post-processor on `.internal-embed[src]`, whose attribute format is also
+  an assumption.
+- `app.openWithDefaultApp(path)` with a vault-relative path
+  (feature-detected).
+- `vault.getConfig('readableLineLength')` (already used).
+- That `[[nb.ipynb#Heading]]` reaches `setEphemeralState` as
+  `{ subpath: '#Heading' }`, and that `openFile(file, { eState })`
+  delivers `eState` to a view that is already open.
+- That renaming a folder reports the folder (and possibly each file);
+  the library handles both.
+- `window.open` with a custom scheme from Obsidian mobile.
+- Obsidian's reading-view embed placeholder being replaceable
+  (`replaceChildren`) without Obsidian putting its content back.

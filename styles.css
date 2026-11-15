@@ -2,33 +2,33 @@
    (markdown-preview-view markdown-rendered), so headings, tables, lists and
    code blocks take their styling from the theme. Only notebook-specific
    parts are styled here, with Obsidian's variables. */
-.ganymede-nb {
+.nbl {
   max-width: none;
   margin: 0 auto;
   padding: var(--size-4-4, 16px) 0;
 }
-.ganymede-nb.is-readable-line-width {
+.nbl.is-readable-line-width {
   max-width: var(--file-line-width, 700px);
 }
-.ganymede-nb-cell {
+.nbl-cell {
   margin-bottom: var(--size-4-3, 12px);
 }
-.ganymede-nb-code > summary {
+.nbl-code > summary {
   cursor: pointer;
   color: var(--text-muted);
   font-size: var(--font-smaller);
 }
-.ganymede-nb-count {
+.nbl-count {
   color: var(--text-faint);
 }
-.ganymede-nb-source pre {
+.nbl-source pre {
   margin: var(--size-4-1, 4px) 0 0;
 }
-.ganymede-nb-output {
+.nbl-output {
   margin-top: var(--size-4-1, 4px);
   overflow-x: auto;
 }
-.ganymede-nb-text {
+.nbl-text {
   margin: 0;
   padding: var(--size-4-2, 8px);
   background: var(--code-background, var(--background-secondary));
@@ -39,27 +39,27 @@
   word-break: break-word;
   user-select: text;
 }
-.ganymede-nb-stderr {
+.nbl-stderr {
   border-left: 3px solid var(--text-muted);
 }
-.ganymede-nb-error {
+.nbl-error {
   border-left: 3px solid var(--text-error);
   color: var(--text-error);
 }
-.ganymede-nb-unsupported {
+.nbl-unsupported {
   color: var(--text-muted);
   font-style: italic;
 }
 /* Charts (Observable Plot) draw black text on a white background; keep them
    readable in dark themes. */
-.ganymede-nb-image {
+.nbl-image {
   max-width: 100%;
   height: auto;
   padding: var(--size-4-2, 8px);
   background: #fff;
   border-radius: var(--radius-s, 4px);
 }
-.ganymede-nb-html {
+.nbl-html {
   width: 100%;
   height: 20rem;
   resize: vertical;
@@ -67,6 +67,86 @@
   background: #fff;
   color-scheme: light;
 }
-.ganymede-nb-failure {
+.nbl-failure {
+  color: var(--text-error);
+}
+/* Header above the cells: title, kernel, last run, tags. */
+.nbl-header {
+  margin-bottom: var(--size-4-4, 16px);
+  padding-bottom: var(--size-4-2, 8px);
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+.nbl-title {
+  font-size: var(--h1-size, 1.6em);
+  font-weight: var(--h1-weight, 700);
+  overflow-wrap: anywhere;
+}
+.nbl-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--size-4-2, 8px);
+  margin-top: var(--size-4-1, 4px);
+  color: var(--text-muted);
+  font-size: var(--font-smaller);
+}
+.nbl-tag {
+  padding: 0 var(--size-4-2, 8px);
+  border-radius: var(--radius-s, 4px);
+  background: var(--background-secondary);
+}
+/* "Show N more lines" under a capped output. */
+.nbl-more {
+  margin-top: var(--size-4-1, 4px);
+  font-size: var(--font-smaller);
+}
+/* The cell a link, outline entry or search result scrolled to. */
+.nbl-flash {
+  animation: nbl-flash 2s ease-out;
+}
+@keyframes nbl-flash {
+  from {
+    background: var(--text-highlight-bg, rgba(255, 208, 0, 0.4));
+  }
+  to {
+    background: transparent;
+  }
+}
+/* An embed in a note: bounded, scrolls inside, with a link to the notebook. */
+.nbl-embed {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s, 4px);
+}
+.nbl-embed-bar {
+  padding: var(--size-4-1, 4px) var(--size-4-2, 8px);
+  border-bottom: 1px solid var(--background-modifier-border);
+  font-size: var(--font-smaller);
+}
+.nbl-embed-body {
+  overflow: auto;
+  padding: 0 var(--size-4-2, 8px);
+}
+/* Search results. */
+.nbl-hit-title {
+  font-size: var(--font-smaller);
+  color: var(--text-muted);
+}
+.nbl-hit-snippet {
+  overflow-wrap: anywhere;
+}
+/* Outline sidebar. */
+.nbl-outline-item {
+  padding: var(--size-4-1, 4px) var(--size-4-2, 8px);
+  cursor: pointer;
+  color: var(--text-muted);
+}
+.nbl-outline-item:hover {
+  color: var(--text-normal);
+  background: var(--background-modifier-hover);
+}
+.nbl-outline-empty {
+  padding: var(--size-4-2, 8px);
+  color: var(--text-faint);
+}
+.nbl-setting-error {
   color: var(--text-error);
 }

@@ -11,7 +11,7 @@ export type Output =
   | { kind: 'unsupported'; mimes: string[] };
 
 export type Cell =
-  | { type: 'markdown'; source: string; attachments: Record<string, string> }
+  | { type: 'markdown'; id: string | null; source: string; attachments: Record<string, string> }
   | {
       type: 'code';
       id: string | null;
@@ -19,11 +19,21 @@ export type Cell =
       executionCount: number | null;
       outputs: Output[];
     }
-  | { type: 'raw'; source: string };
+  | { type: 'raw'; id: string | null; source: string };
+
+/** Notebook-level facts for the header; strings only, nothing is interpreted. */
+export interface NotebookMeta {
+  title: string | null;
+  kernel: string | null;
+  tags: string[];
+  /** Latest execution timestamp of any cell, in ms since the epoch. */
+  lastRun: number | null;
+}
 
 export interface Notebook {
   language: string;
   cells: Cell[];
+  meta: NotebookMeta;
 }
 
 export const IMAGE_MIMES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'] as const;
@@ -88,12 +98,12 @@ export function codeLanguage(language: string): string {
 /**
  * SVG as an <img> needs it: kernels such as Observable Plot serialize from
  * an HTML DOM and leave out the namespace. Mirrors ganymede's
- * `standalone_svg` (crates/ganymede-nbformat/src/html.rs), and also skips
+ * `standalone_svg` (crates/nblformat/src/html.rs), and also skips
  * comments before the root tag.
  */
 export function standaloneSvg(svg: string): string {
   let start = -1;
-  for (let i = 0; ;) {
+  for (let i = 0; ; ) {
     const comment = svg.indexOf('<!--', i);
     const root = svg.indexOf('<svg', i);
     if (root === -1) break;
@@ -236,6 +246,42 @@ function parseAttachments(raw: unknown): Record<string, string> {
   return out;
 }
 
+function cellId(raw: Obj): string | null {
+  return typeof raw.id === 'string' && raw.id ? raw.id : null;
+}
+
+function stringList(v: unknown): string[] {
+  return Array.isArray(v) ? v.filter((t): t is string => typeof t === 'string' && t !== '') : [];
+}
+
+/** The execution time recorded by Jupyter in a cell's `metadata.execution`, or null. */
+function executedAt(raw: Obj): number | null {
+  const exec = isObj(raw.metadata) && isObj(raw.metadata.execution) ? raw.metadata.execution : {};
+  let latest: number | null = null;
+  for (const key of ['iopub.execute_input', 'shell.execute_reply']) {
+    const v = exec[key];
+    const t = typeof v === 'string' ? Date.parse(v) : NaN;
+    if (!Number.isNaN(t) && (latest === null || t > latest)) latest = t;
+  }
+  return latest;
+}
+
+function parseMeta(metadata: Obj, kernelspec: Obj, languageInfo: Obj, lastRun: number | null) {
+  const ganymede = isObj(metadata.ganymede) ? metadata.ganymede : {};
+  const kernel =
+    (typeof kernelspec.display_name === 'string' && kernelspec.display_name) ||
+    (typeof languageInfo.name === 'string' && languageInfo.name) ||
+    null;
+  const tags = [...stringList(metadata.tags), ...stringList(ganymede.tags)];
+  return {
+    title:
+      typeof metadata.title === 'string' && metadata.title.trim() ? metadata.title.trim() : null,
+    kernel,
+    tags: [...new Set(tags)],
+    lastRun,
+  };
+}
+
 /** Parse the text of an .ipynb file. Throws NotebookError with a message fit to show. */
 export function parseNotebook(text: string): Notebook {
   let json: unknown;
@@ -259,25 +305,33 @@ export function parseNotebook(text: string): Notebook {
     '';
 
   const cells: Cell[] = [];
+  let lastRun: number | null = null;
   for (const raw of Array.isArray(json.cells) ? json.cells : []) {
     if (!isObj(raw)) continue;
     const source = multiline(raw.source);
     if (raw.cell_type === 'markdown') {
-      cells.push({ type: 'markdown', source, attachments: parseAttachments(raw.attachments) });
+      cells.push({
+        type: 'markdown',
+        id: cellId(raw),
+        source,
+        attachments: parseAttachments(raw.attachments),
+      });
     } else if (raw.cell_type === 'code') {
       const outputs: Output[] = [];
       for (const o of mergeStreams(Array.isArray(raw.outputs) ? raw.outputs : [])) {
         const parsed = parseOutput(o);
         if (parsed) outputs.push(parsed);
       }
+      const ran = executedAt(raw);
+      if (ran !== null && (lastRun === null || ran > lastRun)) lastRun = ran;
       cells.push({
         type: 'code',
-        id: typeof raw.id === 'string' && raw.id ? raw.id : null,
+        id: cellId(raw),
         source,
         executionCount: typeof raw.execution_count === 'number' ? raw.execution_count : null,
         outputs,
       });
-    } else cells.push({ type: 'raw', source });
+    } else cells.push({ type: 'raw', id: cellId(raw), source });
   }
-  return { language, cells };
+  return { language, cells, meta: parseMeta(metadata, kernelspec, languageInfo, lastRun) };
 }
