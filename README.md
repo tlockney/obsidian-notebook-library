@@ -10,25 +10,85 @@ moved here with its history; [docs/history.md](docs/history.md) is the
 design log from that spike. It is not yet published to Obsidian's plugin
 directory.
 
-## Build
+## Install
+
+The plugin isn't in Obsidian's plugin directory and has no release yet,
+so you build it and copy three files into your vault. It needs Obsidian
+1.5.0 or later, and, to build, git and [Node.js](https://nodejs.org)
+22.12 or later (`npm run check` needs 22.22 or later).
+
+1. Build it:
+
+   ```sh
+   git clone https://github.com/tlockney/obsidian-notebooks.git
+   cd obsidian-notebooks
+   npm ci
+   npm run build
+   ```
+
+   This writes `dist/` with `main.js`, `manifest.json` and `styles.css`.
+
+2. Find your vault's plugin folder, `.obsidian/plugins/` inside the vault
+   folder. The easiest way: in Obsidian, open Settings › Community
+   plugins and click the folder icon next to **Installed plugins**, which
+   opens it. Otherwise, right-click a note at the top level of the file
+   list, choose **Reveal in Finder** (**Show in system explorer** on
+   Windows and Linux), and open `.obsidian` there. Its name starts with a
+   dot, so it is hidden by default (in the macOS Finder, Cmd+Shift+.
+   shows it). In a vault with no community plugins yet, create the
+   `plugins` folder.
+
+3. In the plugins folder, make a folder named `notebook-library` (it must
+   match the plugin id) and copy `main.js`, `manifest.json` and
+   `styles.css` from `dist/` into it, in Finder or Explorer, or on macOS
+   and Linux:
+
+   ```sh
+   VAULT="$HOME/path/to/your/vault"
+   mkdir -p "$VAULT/.obsidian/plugins/notebook-library"
+   cp dist/main.js dist/manifest.json dist/styles.css \
+     "$VAULT/.obsidian/plugins/notebook-library/"
+   ```
+
+4. In Obsidian, open Settings › Community plugins. If it says Restricted
+   mode is on, click **Turn on community plugins**. Click the reload
+   button next to **Installed plugins** (or restart Obsidian), then turn
+   on **Notebook Library**.
+
+5. Open any `.ipynb` file in the vault. **Search notebooks** and
+   **Show notebook outline** are in the command palette (Cmd/Ctrl+P), and
+   the plugin's settings are under Settings › Notebook Library.
+
+To update, build again, copy the three files over the old ones, and run
+**Reload app without saving** from the command palette, or restart
+Obsidian. On other devices, restart Obsidian once the new files have
+synced.
+
+### iPad and iPhone
+
+Mobile Obsidian can't build the plugin, so install it on a desktop first,
+then sync the vault to the device:
+
+- **Obsidian Sync:** on each device, under Settings › Sync › Vault
+  configuration sync, turn on **Installed community plugins** (and
+  **Active community plugin list** to sync which plugins are on). Under
+  Selective sync, turn on **Sync all other types** so `.ipynb` files
+  sync. Restart Obsidian on the device after the first sync. Check Sync's
+  file size limit for your plan: notebooks with large outputs can exceed
+  it.
+- **iCloud:** the `.obsidian/plugins/notebook-library` folder syncs with
+  the vault like any other folder. (On iPhone and iPad, Obsidian reads
+  only vaults on the device or in iCloud.)
+
+Then, if the plugin isn't on yet, turn on **Notebook Library** under
+Settings › Community plugins on the device, as in step 4.
+
+## Development
 
 ```sh
 npm ci
 npm run check   # lint, type-check, tests, build
 ```
-
-This writes `dist/` with `main.js`, `manifest.json` and
-`styles.css`.
-
-## Install
-
-Copy those three files into `<vault>/.obsidian/plugins/notebook-library/`
-and enable **Notebook Library** under Settings › Community plugins.
-
-With Obsidian Sync, turn on syncing of installed community plugins so the
-plugin reaches your other devices, and under Selective syncing turn on
-**Sync all other types** so `.ipynb` files sync. Check Obsidian Sync's file
-size limit for your plan: notebooks with large outputs can exceed it.
 
 ## What it shows
 
