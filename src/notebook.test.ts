@@ -36,7 +36,11 @@ describe('parseNotebook structure', () => {
   });
 
   it('tolerates missing cells, outputs and metadata', () => {
-    expect(parseNotebook('{"nbformat":4}')).toEqual({ language: '', cells: [] });
+    expect(parseNotebook('{"nbformat":4}')).toEqual({
+      language: '',
+      cells: [],
+      meta: { title: null, kernel: null, tags: [], lastRun: null },
+    });
     const p = parseNotebook('{"nbformat":4,"cells":[{"cell_type":"code","source":"1"}]}');
     expect(p.cells).toEqual([
       { type: 'code', id: null, source: '1', executionCount: null, outputs: [] },
@@ -55,7 +59,7 @@ describe('parseNotebook structure', () => {
 
   it('shows an unknown cell type as raw', () => {
     const p = parseNotebook(nb([{ cell_type: 'weird', source: 'x' }]));
-    expect(p.cells).toEqual([{ type: 'raw', source: 'x' }]);
+    expect(p.cells).toEqual([{ type: 'raw', id: null, source: 'x' }]);
   });
 
   it.each([
@@ -383,5 +387,71 @@ describe('bundle edge cases', () => {
     expect(parseNotebook(nb([{ cell_type: 'code', source: '' }])).cells[0]).toMatchObject({
       id: null,
     });
+  });
+});
+
+describe('cell ids and notebook metadata', () => {
+  it('reads the id of every kind of cell', () => {
+    const p = parseNotebook(
+      nb([
+        { cell_type: 'markdown', id: 'm', source: '' },
+        { cell_type: 'code', id: 'c', source: '' },
+        { cell_type: 'raw', id: 'r', source: '' },
+        { cell_type: 'markdown', id: 5, source: '' },
+      ]),
+    );
+    expect(p.cells.map(c => c.id)).toEqual(['m', 'c', 'r', null]);
+  });
+
+  it('reads title, kernel, tags and the last run time', () => {
+    const p = parseNotebook(
+      nb(
+        [
+          {
+            cell_type: 'code',
+            source: '',
+            metadata: { execution: { 'shell.execute_reply': '2025-05-01T10:00:00.123456Z' } },
+          },
+        ],
+        {
+          title: 'T',
+          kernelspec: { display_name: 'K', language: 'python' },
+          tags: ['x'],
+          ganymede: { tags: ['y'] },
+        },
+      ),
+    );
+    expect(p.meta).toEqual({
+      title: 'T',
+      kernel: 'K',
+      tags: ['x', 'y'],
+      lastRun: Date.parse('2025-05-01T10:00:00.123Z'),
+    });
+  });
+
+  it('takes the latest run over all cells, whatever their order', () => {
+    const ran = (t: string) => ({
+      cell_type: 'code',
+      source: '',
+      metadata: { execution: { 'iopub.execute_input': t } },
+    });
+    const last = (...ts: string[]) => parseNotebook(nb(ts.map(ran))).meta.lastRun;
+    const [jan, feb, mar] = ['2025-01-01', '2025-02-01', '2025-03-01'].map(d =>
+      Date.parse(`${d}T00:00:00Z`),
+    );
+    expect(last('2025-03-01T00:00:00Z', '2025-01-01T00:00:00Z', '2025-02-01T00:00:00Z')).toBe(mar);
+    expect(last('2025-01-01T00:00:00Z', '2025-03-01T00:00:00Z', '2025-02-01T00:00:00Z')).toBe(mar);
+    expect(last('2025-02-01T00:00:00Z', '2025-01-01T00:00:00Z')).toBe(feb);
+    expect(last('2025-01-01T00:00:00Z')).toBe(jan);
+  });
+
+  it('names the kernel by the notebook language: language_info first, else kernelspec.language', () => {
+    const kernel = (metadata: object) => parseNotebook(nb([], metadata)).meta.kernel;
+    expect(kernel({ kernelspec: { name: 'julia-1.10', language: 'julia' } })).toBe('julia');
+    expect(kernel({ kernelspec: { language: 'julia' }, language_info: { name: 'r' } })).toBe('r');
+    expect(kernel({ kernelspec: { display_name: 'Julia 1.10', language: 'julia' } })).toBe(
+      'Julia 1.10',
+    );
+    expect(kernel({})).toBeNull();
   });
 });

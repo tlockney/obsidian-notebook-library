@@ -1,65 +1,34 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const h = vi.hoisted(() => ({
-  platform: { isMacOS: true, isDesktopApp: true },
-  actions: [] as { icon: string; title: string }[],
-  highlight: undefined as undefined | ((el: Element) => void),
+  platform: { isMacOS: true, isDesktopApp: true, isMobile: false },
+  actions: [] as { icon: string; title: string; el: HTMLElement; cb: () => void }[],
   loadPrism: undefined as unknown as () => Promise<unknown>,
-  notices: [] as string[],
 }));
 
-vi.mock('obsidian', () => {
-  class TFile {
-    basename: string;
-    constructor(public path: string) {
-      this.basename = path.replace(/\.ipynb$/, '');
+vi.mock('obsidian', async () => {
+  const stub = await vi.importActual<typeof import('./test/obsidian-stub.ts')>('obsidian');
+  class FileView extends stub.FileView {
+    constructor(leaf: { app: unknown }) {
+      super(leaf);
+      this.contentEl = stub.withEmpty(this.contentEl);
     }
-  }
-  class FileSystemAdapter {}
-  class FileView {
-    app: unknown;
-    file: TFile | null = null;
-    navigation = false;
-    contentEl: HTMLElement;
-    constructor(public leaf: { app: unknown }) {
-      this.app = leaf.app;
+    addAction(icon: string, title: string, cb: () => void): HTMLElement {
       const el = document.createElement('div');
-      Object.assign(el, {
-        addClass: (c: string) => el.classList.add(c),
-        empty: () => el.replaceChildren(),
-      });
-      this.contentEl = el;
+      document.body.appendChild(el);
+      h.actions.push({ icon, title, el, cb });
+      return el;
     }
-    onload(): void {}
     registerEvent(): void {}
-    addAction(icon: string, title: string): HTMLElement {
-      h.actions.push({ icon, title });
-      return document.createElement('div');
-    }
   }
-  class Plugin {
-    registerView = vi.fn();
-    registerExtensions = vi.fn();
-  }
-  class Notice {
-    constructor(message: string) {
-      h.notices.push(message);
-    }
-  }
-  return {
-    FileView,
-    FileSystemAdapter,
-    TFile,
-    Plugin,
-    Notice,
-    Platform: h.platform,
-    loadPrism: () => h.loadPrism(),
-  };
+  return { ...stub, FileView, Platform: h.platform, loadPrism: () => h.loadPrism() };
 });
 
-import { TFile } from 'obsidian';
-import GanymedeNotebooksPlugin from './main.ts';
-import { MODIFY_DEBOUNCE_MS, NotebookView } from './view.ts';
+import { FileSystemAdapter, TFile } from 'obsidian';
+import { stub } from './test/obsidian-stub.ts';
+import { DEFAULT_SETTINGS } from './settings.ts';
+import type { Settings } from './settings.ts';
+import { FLASH_MS, MODIFY_DEBOUNCE_MS, NotebookView } from './view.ts';
 
 const tfile = (path: string) => new (TFile as unknown as new (p: string) => TFile)(path);
 
@@ -79,7 +48,11 @@ function deferred<T>() {
 
 type Handler = (f: unknown) => void;
 
-function setup() {
+function setup(
+  overrides: Partial<Settings> = {},
+  adapter: object = new FileSystemAdapter(),
+  path = 'a.ipynb',
+) {
   const handlers: Record<string, Handler> = {};
   const cachedRead = vi.fn<(f: TFile) => Promise<string>>();
   const app = {
@@ -89,19 +62,22 @@ function setup() {
         handlers[name] = cb;
         return {};
       },
-      adapter: {},
+      adapter,
+      getName: () => 'My Vault',
     },
   };
-  const view = new NotebookView({ app } as never);
+  const host = { settings: { ...DEFAULT_SETTINGS, ...overrides }, onRendered: vi.fn() };
+  const view = new NotebookView({ app } as never, host);
   view.onload();
-  const file = tfile('a.ipynb');
+  const file = tfile(path);
   view.file = file as never;
-  return { view, file, cachedRead, handlers };
+  return { view, file, cachedRead, handlers, host, app };
 }
 
 beforeEach(() => {
   h.actions.length = 0;
-  h.notices.length = 0;
+  document.body.replaceChildren();
+  stub.notices.length = 0;
   h.platform.isMacOS = true;
   h.platform.isDesktopApp = true;
   h.loadPrism = async () => ({ languages: { python: {} }, highlightElement: vi.fn() });
@@ -226,31 +202,338 @@ describe('NotebookView', () => {
     expect(view.contentEl.querySelector('code')!.textContent).toBe('x = 1');
   });
 
-  it('offers Open in Ganymede only on macOS desktop', () => {
+  it('offers Open in Ganymede only on macOS desktop with a file-system vault', () => {
     setup();
     expect(h.actions.map(a => a.title)).toEqual(['Show/hide all code', 'Open in Ganymede']);
     h.actions.length = 0;
     h.platform.isDesktopApp = false;
     setup();
     expect(h.actions.map(a => a.title)).toEqual(['Show/hide all code']);
+    h.actions.length = 0;
+    h.platform.isDesktopApp = true;
+    setup({}, {});
+    expect(h.actions.map(a => a.title)).toEqual(['Show/hide all code']);
   });
 });
 
-describe('GanymedeNotebooksPlugin', () => {
-  it('tells the person when another plugin already opens .ipynb', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => {});
-    const plugin = new GanymedeNotebooksPlugin({} as never, {} as never);
-    (plugin.registerExtensions as ReturnType<typeof vi.fn>).mockImplementation(() => {
-      throw new Error('Attempting to register an existing file extension "ipynb"');
-    });
-    await plugin.onload();
-    expect(h.notices).toEqual(['Ganymede Notebooks: another plugin already opens .ipynb files']);
+function richNotebook(): string {
+  const md = (id: string, source: string) => ({ cell_type: 'markdown', id, source });
+  return JSON.stringify({
+    nbformat: 4,
+    metadata: {
+      title: 'My <b>Title</b>',
+      kernelspec: { display_name: 'Python 3', language: 'python' },
+      tags: ['a'],
+    },
+    cells: [
+      md('intro', '# Intro\ntext'),
+      {
+        cell_type: 'code',
+        id: 'c1',
+        source: 'print(1)',
+        execution_count: 7,
+        outputs: [{ output_type: 'stream', name: 'stdout', text: 'x\n'.repeat(100) }],
+        metadata: { execution: { 'iopub.execute_input': '2025-01-02T03:04:05Z' } },
+      },
+      md('methods', '## Methods\nmore'),
+      md('results', '# Results\nend'),
+    ],
+  });
+}
+
+describe('NotebookView content and settings', () => {
+  it('shows the header with textContent, never as markup', async () => {
+    const { view, file, cachedRead } = setup();
+    cachedRead.mockResolvedValue(richNotebook());
+    await view.onLoadFile(file as never);
+    const header = view.contentEl.querySelector('.nbl-header')!;
+    expect(header.querySelector('.nbl-title')!.textContent).toBe('My <b>Title</b>');
+    expect(header.querySelector('b')).toBeNull();
+    expect(header.textContent).toContain('Kernel: Python 3');
+    expect(header.textContent).toContain('Last run:');
+    expect(header.querySelector('.nbl-tag')!.textContent).toBe('a');
   });
 
-  it('registers the view and the extension', async () => {
-    const plugin = new GanymedeNotebooksPlugin({} as never, {} as never);
-    await plugin.onload();
-    expect(plugin.registerExtensions).toHaveBeenCalledWith(['ipynb'], 'ganymede-notebook');
-    expect(h.notices).toEqual([]);
+  it('applies fold, counts and the output cap from the settings', async () => {
+    const { view, file, cachedRead } = setup({
+      foldCode: false,
+      showCounts: false,
+      maxOutputLines: 10,
+    });
+    cachedRead.mockResolvedValue(richNotebook());
+    await view.onLoadFile(file as never);
+    const details = view.contentEl.querySelector('details')!;
+    expect(details.hasAttribute('open')).toBe(true);
+    expect(details.querySelector('.nbl-count')).toBeNull();
+    expect(view.contentEl.querySelector('.nbl-text')!.textContent!.split('\n')).toHaveLength(10);
+    expect(view.contentEl.querySelector('.nbl-more')).not.toBeNull();
+  });
+
+  it('re-renders when refresh() is called after a settings change', async () => {
+    const { view, file, cachedRead, host } = setup();
+    cachedRead.mockResolvedValue(richNotebook());
+    await view.onLoadFile(file as never);
+    expect(view.contentEl.querySelector('details')!.hasAttribute('open')).toBe(false);
+    host.settings.foldCode = false;
+    view.refresh();
+    await vi.waitFor(() =>
+      expect(view.contentEl.querySelector('details')!.hasAttribute('open')).toBe(true),
+    );
+  });
+
+  it('lists the headings of the rendered notebook and tells the host', async () => {
+    const { view, file, cachedRead, host } = setup();
+    cachedRead.mockResolvedValue(richNotebook());
+    await view.onLoadFile(file as never);
+    expect(view.headings.map(x => [x.level, x.text])).toEqual([
+      [1, 'Intro'],
+      [2, 'Methods'],
+      [1, 'Results'],
+    ]);
+    expect(host.onRendered).toHaveBeenCalledWith(view);
+    await view.onUnloadFile(file as never);
+    expect(view.headings).toEqual([]);
+  });
+});
+
+describe('NotebookView navigation', () => {
+  const cellEl = (view: NotebookView, i: number) =>
+    view.contentEl.querySelector(`[data-cell-index="${i}"]`) as HTMLElement;
+
+  it('scrolls to and highlights a heading from a link subpath', async () => {
+    vi.useFakeTimers();
+    const { view, file, cachedRead } = setup();
+    cachedRead.mockResolvedValue(richNotebook());
+    await view.onLoadFile(file as never);
+    const scroll = vi.fn();
+    cellEl(view, 2).scrollIntoView = scroll;
+    view.setEphemeralState({ subpath: '#Methods' });
+    expect(scroll).toHaveBeenCalledTimes(1);
+    expect(cellEl(view, 2).classList.contains('nbl-flash')).toBe(true);
+    await vi.advanceTimersByTimeAsync(FLASH_MS + 10);
+    expect(cellEl(view, 2).classList.contains('nbl-flash')).toBe(false);
+  });
+
+  it('scrolls to a block id, and to a search hit by cell id before its index', async () => {
+    const { view, file, cachedRead } = setup();
+    cachedRead.mockResolvedValue(richNotebook());
+    await view.onLoadFile(file as never);
+    view.setEphemeralState({ subpath: '#^results' });
+    expect(cellEl(view, 3).classList.contains('nbl-flash')).toBe(true);
+    view.setEphemeralState({ notebookCell: { id: 'c1', index: 0 } });
+    expect(cellEl(view, 1).classList.contains('nbl-flash')).toBe(true);
+    // One highlight at a time.
+    expect(cellEl(view, 3).classList.contains('nbl-flash')).toBe(false);
+  });
+
+  it('keeps a target that arrives before the render and applies it after', async () => {
+    const { view, file, cachedRead } = setup();
+    const d = deferred<string>();
+    cachedRead.mockReturnValueOnce(d.promise);
+    const load = view.onLoadFile(file as never);
+    view.setEphemeralState({ subpath: '#Results' });
+    d.resolve(richNotebook());
+    await load;
+    expect(cellEl(view, 3).classList.contains('nbl-flash')).toBe(true);
+  });
+
+  it('ignores a subpath that matches nothing, and does not scroll again on a re-render', async () => {
+    vi.useFakeTimers();
+    const { view, file, cachedRead, handlers } = setup();
+    cachedRead.mockResolvedValue(richNotebook());
+    await view.onLoadFile(file as never);
+    view.setEphemeralState({ subpath: '#Nope' });
+    expect(view.contentEl.querySelector('.nbl-flash')).toBeNull();
+    view.setEphemeralState({ subpath: '#Results' });
+    handlers.modify(file);
+    await vi.advanceTimersByTimeAsync(MODIFY_DEBOUNCE_MS + FLASH_MS);
+    expect(view.contentEl.querySelector('.nbl-flash')).toBeNull();
+  });
+});
+
+describe('NotebookView open externally', () => {
+  const open = () => h.actions.find(a => a.title !== 'Show/hide all code');
+
+  it('opens Ganymede with the encoded absolute path', () => {
+    const spy = vi.spyOn(window, 'open').mockImplementation(() => null);
+    setup();
+    open()!.cb();
+    expect(spy).toHaveBeenCalledWith('ganymede://open?path=%2Fvault%2Fa.ipynb');
+  });
+
+  it('opens a custom URL with every placeholder encoded', () => {
+    const spy = vi.spyOn(window, 'open').mockImplementation(() => null);
+    setup({ openWith: 'custom', customUrl: 'myapp://{vault}/{vaultPath}?n={name}&p={path}' });
+    expect(open()!.title).toBe('Open externally');
+    open()!.cb();
+    expect(spy).toHaveBeenCalledWith('myapp://My%20Vault/a.ipynb?n=a.ipynb&p=%2Fvault%2Fa.ipynb');
+  });
+
+  it('opens the system default app through app.openWithDefaultApp when it exists', () => {
+    const { view, app } = setup({ openWith: 'system' });
+    // Without the undocumented method there is no action.
+    expect(open()).toBeUndefined();
+    const fn = vi.fn();
+    (app as unknown as { openWithDefaultApp: unknown }).openWithDefaultApp = fn;
+    view.refresh();
+    expect(open()!.title).toBe('Open in default app');
+    open()!.cb();
+    expect(fn).toHaveBeenCalledWith('a.ipynb');
+  });
+
+  it('offers no action when Off or when the template is invalid, and swaps it on refresh', () => {
+    setup({ openWith: 'off' });
+    expect(open()).toBeUndefined();
+    h.actions.length = 0;
+    setup({ openWith: 'custom', customUrl: 'javascript:alert(1)' });
+    expect(open()).toBeUndefined();
+    h.actions.length = 0;
+    const { view, host } = setup();
+    const first = open()!;
+    host.settings.openWith = 'custom';
+    host.settings.customUrl = 'myapp://{name}';
+    view.refresh();
+    expect(h.actions.map(a => a.title)).toContain('Open externally');
+    expect(first.el.isConnected).toBe(false);
+    expect(h.actions.at(-1)!.el.isConnected).toBe(true);
+    host.settings.openWith = 'off';
+    view.refresh();
+    expect(h.actions.at(-1)!.el.isConnected).toBe(false);
+  });
+});
+
+describe('NotebookView lifecycle', () => {
+  const cellEl = (view: NotebookView, i: number) =>
+    view.contentEl.querySelector(`[data-cell-index="${i}"]`) as HTMLElement;
+
+  it('forgets headings and targets when the file becomes unparseable, and tells the host', async () => {
+    const { view, file, cachedRead, host } = setup();
+    cachedRead.mockResolvedValue(richNotebook());
+    await view.onLoadFile(file as never);
+    expect(view.headings).toHaveLength(3);
+    host.onRendered.mockClear();
+    cachedRead.mockResolvedValue('{nope');
+    view.refresh();
+    await vi.waitFor(() =>
+      expect(view.contentEl.textContent).toContain('Cannot open this notebook'),
+    );
+    expect(view.headings).toEqual([]);
+    expect(host.onRendered).toHaveBeenCalledWith(view);
+    // A target for the old notebook has nothing to apply to: it waits, not scrolls.
+    view.setEphemeralState({ subpath: '#Results' });
+    cachedRead.mockResolvedValue(richNotebook());
+    view.refresh();
+    await vi.waitFor(() => expect(cellEl(view, 3)).not.toBeNull());
+    expect(cellEl(view, 3).classList.contains('nbl-flash')).toBe(true);
+  });
+
+  it('tells the host on unload, with no headings left', async () => {
+    const { view, file, cachedRead, host } = setup();
+    cachedRead.mockResolvedValue(richNotebook());
+    await view.onLoadFile(file as never);
+    host.onRendered.mockClear();
+    await view.onUnloadFile(file as never);
+    expect(host.onRendered).toHaveBeenCalledWith(view);
+    expect(view.headings).toEqual([]);
+  });
+
+  it('drops a waiting target on unload, so it does not scroll the next file', async () => {
+    const { view, file, cachedRead } = setup();
+    view.setEphemeralState({ subpath: '#Results' });
+    await view.onUnloadFile(file as never);
+    cachedRead.mockResolvedValue(richNotebook());
+    await view.onLoadFile(file as never);
+    expect(view.contentEl.querySelector('.nbl-flash')).toBeNull();
+  });
+
+  it.each([
+    ['onUnloadFile', (v: NotebookView, f: unknown) => v.onUnloadFile(f as never)],
+    ['onunload', (v: NotebookView) => v.onunload()],
+  ])('clears the highlight timer on %s', async (_n, close) => {
+    vi.useFakeTimers();
+    const { view, file, cachedRead } = setup();
+    cachedRead.mockResolvedValue(richNotebook());
+    await view.onLoadFile(file as never);
+    view.setEphemeralState({ subpath: '#Results' });
+    expect(vi.getTimerCount()).toBe(1);
+    await close(view, file);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('keeps a collapsed cell collapsed with fold off, and refolds when the setting changes', async () => {
+    const { view, file, cachedRead, host } = setup({ foldCode: false });
+    cachedRead.mockResolvedValue(richNotebook());
+    await view.onLoadFile(file as never);
+    const details = () => view.contentEl.querySelector('details')!;
+    expect(details().hasAttribute('open')).toBe(true);
+    details().removeAttribute('open');
+    view.refresh();
+    await vi.waitFor(() => expect(host.onRendered).toHaveBeenCalledTimes(2));
+    expect(details().hasAttribute('open')).toBe(false);
+    // The setting itself changed: the reader's earlier choice no longer applies.
+    host.settings.foldCode = true;
+    details().setAttribute('open', '');
+    view.refresh();
+    await vi.waitFor(() => expect(host.onRendered).toHaveBeenCalledTimes(3));
+    expect(details().hasAttribute('open')).toBe(false);
+    host.settings.foldCode = false;
+    view.refresh();
+    await vi.waitFor(() => expect(host.onRendered).toHaveBeenCalledTimes(4));
+    expect(details().hasAttribute('open')).toBe(true);
+  });
+
+  it('opens with the vault-relative path, not the file name, for a nested file', () => {
+    const fn = vi.fn();
+    const sys = setup({ openWith: 'system' }, new FileSystemAdapter(), 'dir/sub/a.ipynb');
+    (sys.app as unknown as { openWithDefaultApp: unknown }).openWithDefaultApp = fn;
+    sys.view.refresh();
+    h.actions.find(a => a.title === 'Open in default app')!.cb();
+    expect(fn).toHaveBeenCalledWith('dir/sub/a.ipynb');
+
+    h.actions.length = 0;
+    const spy = vi.spyOn(window, 'open').mockImplementation(() => null);
+    setup(
+      { openWith: 'custom', customUrl: 'x://{vaultPath}|{name}|{path}' },
+      new FileSystemAdapter(),
+      'dir/sub/a.ipynb',
+    );
+    h.actions.find(a => a.title === 'Open externally')!.cb();
+    expect(spy).toHaveBeenCalledWith(
+      'x://dir%2Fsub%2Fa.ipynb|a.ipynb|%2Fvault%2Fdir%2Fsub%2Fa.ipynb',
+    );
+  });
+});
+
+describe('NotebookView open externally failures', () => {
+  it('shows a notice and logs when the opener throws', () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { view, app } = setup({ openWith: 'system' });
+    (app as unknown as { openWithDefaultApp: unknown }).openWithDefaultApp = () => {
+      throw new Error('boom');
+    };
+    view.refresh();
+    h.actions.find(a => a.title === 'Open in default app')!.cb();
+    expect(stub.notices).toEqual(['Notebook Library: could not open the notebook externally']);
+    expect(err).toHaveBeenCalled();
+  });
+
+  it('does nothing when the setting was turned off after the action was added', () => {
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    const { host } = setup();
+    const action = h.actions.find(a => a.title === 'Open in Ganymede')!;
+    host.settings.openWith = 'off';
+    action.cb();
+    expect(open).not.toHaveBeenCalled();
+    expect(stub.notices).toEqual([]);
+  });
+
+  it('does nothing when no file is open', () => {
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    const { view } = setup();
+    const action = h.actions.find(a => a.title === 'Open in Ganymede')!;
+    view.file = null;
+    action.cb();
+    expect(open).not.toHaveBeenCalled();
+    expect(stub.notices).toEqual([]);
   });
 });

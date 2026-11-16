@@ -8,7 +8,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 
 // Library build of the plugin to dist/main.js (CommonJS, as Obsidian loads
 // it), with manifest.json and styles.css beside it: the three files to copy
-// into <vault>/.obsidian/plugins/ganymede-notebooks/.
+// into <vault>/.obsidian/plugins/notebook-library/.
 export default defineConfig({
   root: here,
   publicDir: false,

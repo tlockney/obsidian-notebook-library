@@ -15,7 +15,7 @@ describe('renderSafeMarkdown', () => {
     const el = md('hi');
     const wrap = el.firstElementChild!;
     expect(wrap.classList.contains('markdown-rendered')).toBe(true);
-    expect(wrap.classList.contains('ganymede-nb-markdown')).toBe(true);
+    expect(wrap.classList.contains('nbl-markdown')).toBe(true);
   });
 
   it('renders headings and emphasis', () => {
@@ -178,24 +178,24 @@ describe('renderSafeMarkdown', () => {
   });
 
   describe('math stays literal', () => {
-    const math = (src: string) => md(src).querySelectorAll('.ganymede-nb-math');
+    const math = (src: string) => md(src).querySelectorAll('.nbl-math');
 
     it('inline math keeps its asterisks', () => {
       const el = md('see $a*b*c$ here');
       expect(el.querySelector('em')).toBeNull();
-      expect(el.querySelector('.ganymede-nb-math')!.textContent).toBe('$a*b*c$');
+      expect(el.querySelector('.nbl-math')!.textContent).toBe('$a*b*c$');
       expect(el.textContent?.trim()).toBe('see $a*b*c$ here');
     });
 
     it('display math keeps backslashes and underscores', () => {
       const el = md('before\n\n$$ a \\\\ b_1 + c_2 $$\n\nafter');
-      expect(el.querySelector('.ganymede-nb-math')!.textContent).toBe('$$ a \\\\ b_1 + c_2 $$');
+      expect(el.querySelector('.nbl-math')!.textContent).toBe('$$ a \\\\ b_1 + c_2 $$');
       expect(el.querySelector('em')).toBeNull();
     });
 
     it('multiline display math survives', () => {
       const el = md('$$\nx_1 *y*\n$$');
-      expect(el.querySelector('.ganymede-nb-math')!.textContent).toBe('$$\nx_1 *y*\n$$');
+      expect(el.querySelector('.nbl-math')!.textContent).toBe('$$\nx_1 *y*\n$$');
     });
 
     it('escaped dollars and prices are not math', () => {
@@ -207,7 +207,7 @@ describe('renderSafeMarkdown', () => {
 
     it('math is not taken from code', () => {
       const el = md('`$a*b*c$`\n\n```\n$x_1$ $$y$$\n```');
-      expect(el.querySelectorAll('.ganymede-nb-math')).toHaveLength(0);
+      expect(el.querySelectorAll('.nbl-math')).toHaveLength(0);
       expect(el.querySelectorAll('code')[0].textContent).toBe('$a*b*c$');
       expect(el.querySelector('pre code')!.textContent).toBe('$x_1$ $$y$$\n');
     });
@@ -215,7 +215,7 @@ describe('renderSafeMarkdown', () => {
     it('the math span is text, never markup', () => {
       const el = md('$<b>x</b>$');
       expect(el.querySelector('b')).toBeNull();
-      expect(el.querySelector('.ganymede-nb-math')!.textContent).toBe('$<b>x</b>$');
+      expect(el.querySelector('.nbl-math')!.textContent).toBe('$<b>x</b>$');
     });
   });
 
