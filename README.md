@@ -173,9 +173,20 @@ Changing a setting redraws open notebooks and embeds; text fields save 0.5 s aft
 
 The header action opens the notebook in another app:
 
-- **Ganymede** (default): `ganymede://open?path=<absolute path>`, which the
-  Mac app handles. macOS desktop only; it isn't offered on iPad or iPhone,
-  where Ganymede can't read Obsidian's sandbox. Action: "Open in Ganymede".
+- **Ganymede** (default): action "Open in Ganymede".
+  - macOS desktop: `ganymede://open?path=<absolute path>`, which the Mac app
+    handles.
+  - iPad and iPhone: `ganymede://open?folder=<vault name>&file=<path in the
+    vault>`. Ganymede must have the vault folder, once: grant it in
+    Ganymede under Settings › Link Folders, or choose Grant Access… when the
+    first link asks. The folder name has to match the vault's name exactly.
+    Not offered on Android, Windows or Linux.
+
+  > [!NOTE]
+  > **Unreleased.** Needs a Ganymede build that includes
+  > [ganymede-ui#640](https://github.com/tlockney/ganymede-ui/issues/640);
+  > no release has it yet. Until then the action is offered on iPad and
+  > iPhone but Ganymede doesn't open the notebook.
 - **System default app**: Obsidian's `openWithDefaultApp`, on desktop
   only, and only when this Obsidian has it. Action: "Open in default app".
 - **Custom URL**: a template with `{path}` (absolute path), `{vaultPath}`

@@ -174,3 +174,22 @@ the last render. Text settings save 500 ms after the last keystroke (and on
 closing the tab); the custom URL save only re-decides header actions. A
 failed render clears the view's notebook model, so the outline and pending
 targets don't act on the old file.
+
+## 2026-11-16, Open in Ganymede on iPad and iPhone (#8)
+
+The "Ganymede" Open-with choice now also works on iPad and iPhone
+(`Platform.isIosApp`; checked before macOS because an iPad reports
+`isMacOS` too). There is no absolute path there, so the action opens
+`ganymede://open?folder=<vault name>&file=<vault-relative path>`, both
+values through `encodeURIComponent`. The folder is the vault's name
+(`app.vault.getName()`: the vault folder's name in Obsidian; the typings
+offer nothing better, `CapacitorAdapter` has no base path). macOS desktop
+keeps `path=`, since the Mac app refuses `folder=` links. Android,
+Windows and Linux are unchanged: no Ganymede action. `resolveOpenAction`
+returns which form to use, so the view doesn't re-derive it.
+
+Needs a Ganymede build with ganymede-ui#640 (PR #642, unreleased) and the
+vault folder granted once in Ganymede. Still assumed, not tried on a
+device: `window.open` with a `ganymede://` URL from Obsidian on iOS (the
+typings have no external-URL opener), and that the vault's name equals the
+granted folder's last path component.

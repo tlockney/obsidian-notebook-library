@@ -3,7 +3,7 @@ import type { TAbstractFile, WorkspaceLeaf } from 'obsidian';
 import { notebookHeader } from './header.ts';
 import { NotebookError, parseNotebook } from './notebook.ts';
 import type { Notebook } from './notebook.ts';
-import { buildCustomUrl, ganymedeOpenUrl, resolveOpenAction } from './openwith.ts';
+import { buildCustomUrl, ganymedeFolderUrl, ganymedeOpenUrl, resolveOpenAction } from './openwith.ts';
 import type { OpenEnv } from './openwith.ts';
 import { notebookHeadings, resolveTarget, targetFromState } from './outline.ts';
 import type { Heading, Target } from './outline.ts';
@@ -155,6 +155,7 @@ export class NotebookView extends FileView {
     return {
       isMacOS: Platform.isMacOS,
       isDesktopApp: Platform.isDesktopApp,
+      isIosApp: Platform.isIosApp,
       hasFilePath: this.app.vault.adapter instanceof FileSystemAdapter,
       hasOpenWithDefaultApp,
     };
@@ -178,7 +179,15 @@ export class NotebookView extends FileView {
       adapter instanceof FileSystemAdapter ? adapter.getFullPath(file.path) : undefined;
     try {
       if (action.kind === 'ganymede') {
-        if (fullPath !== undefined) window.open(ganymedeOpenUrl(fullPath));
+        // No typed Obsidian API opens an external URL (obsidian.d.ts has none),
+        // so window.open it is, as for the custom URL.
+        if (action.form === 'folder') {
+          // The vault's name is its folder's name in Obsidian; the typings give
+          // no other source (CapacitorAdapter has no base path, only getName()).
+          window.open(ganymedeFolderUrl(this.app.vault.getName(), file.path));
+        } else if (fullPath !== undefined) {
+          window.open(ganymedeOpenUrl(fullPath));
+        }
       } else if (action.kind === 'system') {
         // Undocumented; takes the vault-relative path.
         (this.app as unknown as { openWithDefaultApp(p: string): unknown }).openWithDefaultApp(

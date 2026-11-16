@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const h = vi.hoisted(() => ({
-  platform: { isMacOS: true, isDesktopApp: true, isMobile: false },
+  platform: { isMacOS: true, isDesktopApp: true, isIosApp: false, isMobile: false },
   actions: [] as { icon: string; title: string; el: HTMLElement; cb: () => void }[],
   loadPrism: undefined as unknown as () => Promise<unknown>,
 }));
@@ -80,6 +80,7 @@ beforeEach(() => {
   stub.notices.length = 0;
   h.platform.isMacOS = true;
   h.platform.isDesktopApp = true;
+  h.platform.isIosApp = false;
   h.loadPrism = async () => ({ languages: { python: {} }, highlightElement: vi.fn() });
   vi.spyOn(console, 'warn').mockImplementation(() => {});
 });
@@ -501,6 +502,33 @@ describe('NotebookView lifecycle', () => {
     expect(spy).toHaveBeenCalledWith(
       'x://dir%2Fsub%2Fa.ipynb|a.ipynb|%2Fvault%2Fdir%2Fsub%2Fa.ipynb',
     );
+  });
+});
+
+describe('NotebookView Open in Ganymede', () => {
+  it('opens the path form on macOS desktop', () => {
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    setup({}, new FileSystemAdapter(), 'dir/a b.ipynb');
+    h.actions.find(a => a.title === 'Open in Ganymede')!.cb();
+    expect(open).toHaveBeenCalledWith('ganymede://open?path=%2Fvault%2Fdir%2Fa%20b.ipynb');
+  });
+
+  it('opens the folder form on iPad and iPhone, with no file-system path', () => {
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    h.platform.isDesktopApp = false;
+    h.platform.isIosApp = true;
+    setup({}, {}, 'dir/a b.ipynb');
+    h.actions.find(a => a.title === 'Open in Ganymede')!.cb();
+    expect(open).toHaveBeenCalledWith(
+      'ganymede://open?folder=My%20Vault&file=dir%2Fa%20b.ipynb',
+    );
+  });
+
+  it('offers nothing on Android', () => {
+    h.platform.isDesktopApp = false;
+    h.platform.isMacOS = false;
+    setup({}, {});
+    expect(h.actions.map(a => a.title)).toEqual(['Show/hide all code']);
   });
 });
 

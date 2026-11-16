@@ -118,7 +118,7 @@ export class NotebookSettingTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName('Open with')
       .setDesc(
-        "The action in a notebook's header. Ganymede is macOS desktop only; System default app is desktop only.",
+        "The action in a notebook's header. Ganymede works on macOS and, with a Ganymede build that has ganymede-ui#640, on iPad and iPhone after you grant the vault folder in Ganymede (Settings > Link Folders). System default app is desktop only.",
       )
       .addDropdown(d => {
         for (const v of OPEN_WITH_VALUES) d.addOption(v, OPEN_WITH_LABELS[v]);

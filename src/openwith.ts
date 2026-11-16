@@ -3,8 +3,19 @@
 
 import type { Settings } from './settings.ts';
 
+/** The Mac app's link: an absolute path. The Mac app refuses `folder=` links. */
 export function ganymedeOpenUrl(fullPath: string): string {
   return `ganymede://open?path=${encodeURIComponent(fullPath)}`;
+}
+
+/**
+ * The iPad and iPhone link: the name of a folder the person granted in
+ * Ganymede (matched exactly against its last path component) and the file's
+ * path relative to that folder. Both values are encoded, so a `/` in the file
+ * path becomes %2F; the app decodes query values.
+ */
+export function ganymedeFolderUrl(vaultFolderName: string, vaultRelativePath: string): string {
+  return `ganymede://open?folder=${encodeURIComponent(vaultFolderName)}&file=${encodeURIComponent(vaultRelativePath)}`;
 }
 
 /** Schemes a template may never use: they run script or reach local files. */
@@ -72,17 +83,29 @@ export function buildCustomUrl(template: string, values: UrlValues): string | nu
 export interface OpenEnv {
   isMacOS: boolean;
   isDesktopApp: boolean;
+  /** Obsidian on iPad or iPhone (`Platform.isIosApp`). iPad also reports `isMacOS`. */
+  isIosApp: boolean;
   /** The vault is on a file system, so an absolute path exists. */
   hasFilePath: boolean;
   /** `app.openWithDefaultApp` exists in this Obsidian. */
   hasOpenWithDefaultApp: boolean;
 }
 
-export type OpenAction = { kind: 'ganymede' | 'system' | 'custom'; label: string };
+export type OpenAction =
+  | {
+      kind: 'ganymede';
+      label: string;
+      /** `path`: absolute path (Mac app). `folder`: granted folder name plus relative path (iPad, iPhone). */
+      form: 'path' | 'folder';
+    }
+  | { kind: 'system' | 'custom'; label: string };
 
 /**
  * The action the header offers, or null for none. Ganymede: macOS desktop,
- * where the Mac app handles ganymede:// and can read the vault. System app:
+ * where the Mac app handles ganymede:// and can read the vault (path form);
+ * iPad and iPhone, where the app reads a folder the person granted (folder
+ * form; checked first because an iPad also reports isMacOS). Never Android,
+ * Windows or Linux. System app:
  * desktop with a path and Obsidian's openWithDefaultApp. Custom URL: an
  * invalid template offers nothing; one using {path} needs a desktop path.
  */
@@ -93,7 +116,10 @@ export function resolveOpenAction(
   const desktopPath = env.isDesktopApp && env.hasFilePath;
   switch (settings.openWith) {
     case 'ganymede':
-      return env.isMacOS && desktopPath ? { kind: 'ganymede', label: 'Open in Ganymede' } : null;
+      if (env.isIosApp) return { kind: 'ganymede', label: 'Open in Ganymede', form: 'folder' };
+      return env.isMacOS && desktopPath
+        ? { kind: 'ganymede', label: 'Open in Ganymede', form: 'path' }
+        : null;
     case 'system':
       return desktopPath && env.hasOpenWithDefaultApp
         ? { kind: 'system', label: 'Open in default app' }
