@@ -20,8 +20,8 @@ so you build it and copy three files into your vault. It needs Obsidian
 1. Build it:
 
    ```sh
-   git clone https://github.com/tlockney/obsidian-notebooks.git
-   cd obsidian-notebooks
+   git clone https://github.com/tlockney/obsidian-notebook-library.git
+   cd obsidian-notebook-library
    npm ci
    npm run build
    ```
