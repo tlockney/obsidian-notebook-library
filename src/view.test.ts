@@ -25,6 +25,7 @@ vi.mock('obsidian', async () => {
 });
 
 import { FileSystemAdapter, TFile } from 'obsidian';
+import { stub } from './test/obsidian-stub.ts';
 import { DEFAULT_SETTINGS } from './settings.ts';
 import type { Settings } from './settings.ts';
 import { FLASH_MS, MODIFY_DEBOUNCE_MS, NotebookView } from './view.ts';
@@ -76,6 +77,7 @@ function setup(
 beforeEach(() => {
   h.actions.length = 0;
   document.body.replaceChildren();
+  stub.notices.length = 0;
   h.platform.isMacOS = true;
   h.platform.isDesktopApp = true;
   h.loadPrism = async () => ({ languages: { python: {} }, highlightElement: vi.fn() });
@@ -499,5 +501,39 @@ describe('NotebookView lifecycle', () => {
     expect(spy).toHaveBeenCalledWith(
       'x://dir%2Fsub%2Fa.ipynb|a.ipynb|%2Fvault%2Fdir%2Fsub%2Fa.ipynb',
     );
+  });
+});
+
+describe('NotebookView open externally failures', () => {
+  it('shows a notice and logs when the opener throws', () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { view, app } = setup({ openWith: 'system' });
+    (app as unknown as { openWithDefaultApp: unknown }).openWithDefaultApp = () => {
+      throw new Error('boom');
+    };
+    view.refresh();
+    h.actions.find(a => a.title === 'Open in default app')!.cb();
+    expect(stub.notices).toEqual(['Notebook Library: could not open the notebook externally']);
+    expect(err).toHaveBeenCalled();
+  });
+
+  it('does nothing when the setting was turned off after the action was added', () => {
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    const { host } = setup();
+    const action = h.actions.find(a => a.title === 'Open in Ganymede')!;
+    host.settings.openWith = 'off';
+    action.cb();
+    expect(open).not.toHaveBeenCalled();
+    expect(stub.notices).toEqual([]);
+  });
+
+  it('does nothing when no file is open', () => {
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    const { view } = setup();
+    const action = h.actions.find(a => a.title === 'Open in Ganymede')!;
+    view.file = null;
+    action.cb();
+    expect(open).not.toHaveBeenCalled();
+    expect(stub.notices).toEqual([]);
   });
 });

@@ -499,6 +499,23 @@ describe('applyOpen sets both ways', () => {
     expect(opens(next)).toEqual([false, true, false, true]);
   });
 
+  it('applies a position-matched id-less state to the cells it covers, and leaves the rest', () => {
+    const before = document.createElement('div');
+    renderNotebook(nbOf(null), before, undefined, { foldCode: false });
+    const next = document.createElement('div');
+    renderNotebook(nbOf(null, null), next, undefined, { foldCode: false });
+    applyOpen(next, captureOpen(before));
+    // The first cell was open, and the second is new: it keeps the default (open).
+    expect(opens(next)).toEqual([true, true]);
+    const closed = document.createElement('div');
+    renderNotebook(nbOf(null), closed, undefined, { foldCode: false });
+    closed.querySelector('details')!.removeAttribute('open');
+    const again = document.createElement('div');
+    renderNotebook(nbOf(null, null), again, undefined, { foldCode: false });
+    applyOpen(again, captureOpen(closed));
+    expect(opens(again)).toEqual([false, true]);
+  });
+
   it('leaves a cell the state does not know at its default', () => {
     const next = document.createElement('div');
     renderNotebook(nbOf('new', 'a'), next, undefined, { foldCode: false });

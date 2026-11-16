@@ -98,7 +98,7 @@ export function codeLanguage(language: string): string {
 /**
  * SVG as an <img> needs it: kernels such as Observable Plot serialize from
  * an HTML DOM and leave out the namespace. Mirrors ganymede's
- * `standalone_svg` (crates/nblformat/src/html.rs), and also skips
+ * `standalone_svg` (crates/ganymede-nbformat/src/html.rs), and also skips
  * comments before the root tag.
  */
 export function standaloneSvg(svg: string): string {
@@ -266,12 +266,10 @@ function executedAt(raw: Obj): number | null {
   return latest;
 }
 
-function parseMeta(metadata: Obj, kernelspec: Obj, languageInfo: Obj, lastRun: number | null) {
+function parseMeta(metadata: Obj, kernelspec: Obj, language: string, lastRun: number | null) {
   const ganymede = isObj(metadata.ganymede) ? metadata.ganymede : {};
   const kernel =
-    (typeof kernelspec.display_name === 'string' && kernelspec.display_name) ||
-    (typeof languageInfo.name === 'string' && languageInfo.name) ||
-    null;
+    (typeof kernelspec.display_name === 'string' && kernelspec.display_name) || language || null;
   const tags = [...stringList(metadata.tags), ...stringList(ganymede.tags)];
   return {
     title:
@@ -333,5 +331,5 @@ export function parseNotebook(text: string): Notebook {
       });
     } else cells.push({ type: 'raw', id: cellId(raw), source });
   }
-  return { language, cells, meta: parseMeta(metadata, kernelspec, languageInfo, lastRun) };
+  return { language, cells, meta: parseMeta(metadata, kernelspec, language, lastRun) };
 }

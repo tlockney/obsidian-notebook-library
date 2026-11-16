@@ -444,4 +444,14 @@ describe('cell ids and notebook metadata', () => {
     expect(last('2025-02-01T00:00:00Z', '2025-01-01T00:00:00Z')).toBe(feb);
     expect(last('2025-01-01T00:00:00Z')).toBe(jan);
   });
+
+  it('names the kernel by the notebook language: language_info first, else kernelspec.language', () => {
+    const kernel = (metadata: object) => parseNotebook(nb([], metadata)).meta.kernel;
+    expect(kernel({ kernelspec: { name: 'julia-1.10', language: 'julia' } })).toBe('julia');
+    expect(kernel({ kernelspec: { language: 'julia' }, language_info: { name: 'r' } })).toBe('r');
+    expect(kernel({ kernelspec: { display_name: 'Julia 1.10', language: 'julia' } })).toBe(
+      'Julia 1.10',
+    );
+    expect(kernel({})).toBeNull();
+  });
 });

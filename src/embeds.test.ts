@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Plugin, TFile } from './test/obsidian-stub.ts';
 import {
   embedRegistryOf,
+  EMBED_MAX_BYTES,
   EMBED_MAX_HEIGHT,
   NotebookEmbed,
   registerNotebookEmbeds,
@@ -113,6 +114,23 @@ describe('NotebookEmbed', () => {
       expect(s.el.querySelector('.nbl-failure')!.textContent).toBe(`Could not find ${sub} in nb.`);
       expect(s.el.querySelector('.nbl-embed-open')).not.toBeNull();
     }
+  });
+
+  it('does not read or draw a notebook over the size cap, but still links to it', async () => {
+    const s = setup();
+    s.file.stat.size = EMBED_MAX_BYTES + 1;
+    await s.embed('#Methods').loadFile();
+    expect(s.cachedRead).not.toHaveBeenCalled();
+    expect(cellsIn(s.el)).toEqual([]);
+    expect(s.el.querySelector('.nbl-failure')!.textContent).toContain('Too large to embed');
+    expect(s.el.querySelector('.nbl-embed-open')!.textContent).toBe('Open nb#Methods');
+  });
+
+  it('draws a notebook of exactly the cap', async () => {
+    const s = setup();
+    s.file.stat.size = EMBED_MAX_BYTES;
+    await s.embed().loadFile();
+    expect(cellsIn(s.el)).toEqual(['0', '1', '2', '3']);
   });
 
   it('shows why a notebook cannot be read', async () => {

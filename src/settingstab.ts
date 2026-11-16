@@ -1,4 +1,4 @@
-import { PluginSettingTab, Setting } from 'obsidian';
+import { Notice, PluginSettingTab, Setting } from 'obsidian';
 import type { App, Plugin } from 'obsidian';
 import { validateUrlTemplate } from './openwith.ts';
 import { OPEN_WITH_VALUES } from './settings.ts';
@@ -36,6 +36,16 @@ export class NotebookSettingTab extends PluginSettingTab {
     super(app, plugin);
   }
 
+  /** Save; a failed write is reported, not lost in a rejected promise. */
+  private async save(scope?: 'actions'): Promise<void> {
+    try {
+      await (scope ? this.plugin.saveSettings(scope) : this.plugin.saveSettings());
+    } catch (e) {
+      console.error('Notebook Library: could not save settings', e);
+      new Notice('Notebook Library: could not save settings');
+    }
+  }
+
   /** Run `run` after a quiet time; a newer call for the same key replaces it. */
   private later(key: string, run: () => void): void {
     clearTimeout(this.pending.get(key)?.timer);
@@ -67,7 +77,7 @@ export class NotebookSettingTab extends PluginSettingTab {
       .addToggle(t =>
         t.setValue(s.foldCode).onChange(async v => {
           s.foldCode = v;
-          await this.plugin.saveSettings();
+          await this.save();
         }),
       );
 
@@ -77,7 +87,7 @@ export class NotebookSettingTab extends PluginSettingTab {
       .addToggle(t =>
         t.setValue(s.showCounts).onChange(async v => {
           s.showCounts = v;
-          await this.plugin.saveSettings();
+          await this.save();
         }),
       );
 
@@ -91,7 +101,7 @@ export class NotebookSettingTab extends PluginSettingTab {
           const n = Number(v.trim());
           if (v.trim() === '' || !Number.isInteger(n) || n < 0 || n > 100000) return;
           s.maxOutputLines = n;
-          this.later('maxOutputLines', () => void this.plugin.saveSettings());
+          this.later('maxOutputLines', () => void this.save());
         }),
       );
 
@@ -101,7 +111,7 @@ export class NotebookSettingTab extends PluginSettingTab {
       .addToggle(t =>
         t.setValue(s.searchOutputs).onChange(async v => {
           s.searchOutputs = v;
-          await this.plugin.saveSettings();
+          await this.save();
         }),
       );
 
@@ -114,7 +124,7 @@ export class NotebookSettingTab extends PluginSettingTab {
         for (const v of OPEN_WITH_VALUES) d.addOption(v, OPEN_WITH_LABELS[v]);
         d.setValue(s.openWith).onChange(async v => {
           s.openWith = v as OpenWith;
-          await this.plugin.saveSettings();
+          await this.save();
           this.display();
         });
       });
@@ -133,7 +143,7 @@ export class NotebookSettingTab extends PluginSettingTab {
             .onChange(v => {
               s.customUrl = v;
               // Only the header actions depend on the template.
-              this.later('customUrl', () => void this.plugin.saveSettings('actions'));
+              this.later('customUrl', () => void this.save('actions'));
               const r = validateUrlTemplate(v);
               problem.textContent = r.ok ? '' : r.reason;
             }),

@@ -17,6 +17,7 @@ function setup(overrides = {}) {
 
 beforeEach(() => {
   stub.settingRows.length = 0;
+  stub.notices.length = 0;
   vi.useFakeTimers();
 });
 
@@ -116,5 +117,47 @@ describe('NotebookSettingTab', () => {
     expect(row('Custom URL').descEl.querySelector('.nbl-setting-error')!.textContent).toBe(
       'The file: scheme is not allowed.',
     );
+  });
+});
+
+describe('NotebookSettingTab when saving fails', () => {
+  const failing = () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const s = setup();
+    s.plugin.saveSettings.mockRejectedValue(new Error('disk full'));
+    return { ...s, err };
+  };
+  const reported = (err: ReturnType<typeof vi.spyOn>) => {
+    expect(stub.notices).toEqual(['Notebook Library: could not save settings']);
+    expect(err).toHaveBeenCalled();
+  };
+
+  it.each(['Fold code cells by default', 'Show execution counts', 'Search text outputs'])(
+    'reports a failed save of the %s toggle',
+    async name => {
+      const { row, err } = failing();
+      await row(name).controls[0].onChange!(false as never);
+      reported(err);
+    },
+  );
+
+  it('reports a failed save of the Open with dropdown, and still redraws', async () => {
+    const { row, err, tab } = failing();
+    const redraw = vi.spyOn(tab, 'display');
+    await row('Open with').controls[0].onChange!('off' as never);
+    reported(err);
+    expect(redraw).toHaveBeenCalled();
+  });
+
+  it('reports a failed debounced save, and one that runs when the tab closes', async () => {
+    const { row, err, tab } = failing();
+    await row('Long output limit').controls[0].onChange!('9' as never);
+    await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+    reported(err);
+    stub.notices.length = 0;
+    await row('Long output limit').controls[0].onChange!('8' as never);
+    tab.hide();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(stub.notices).toEqual(['Notebook Library: could not save settings']);
   });
 });

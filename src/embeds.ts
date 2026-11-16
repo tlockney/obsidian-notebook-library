@@ -21,6 +21,9 @@ export interface EmbedHost {
 /** The embed area scrolls inside the note past this height. */
 export const EMBED_MAX_HEIGHT = '30em';
 
+/** A notebook larger than this is not drawn inside a note. */
+export const EMBED_MAX_BYTES = 5 * 1024 * 1024;
+
 export class NotebookEmbed extends MarkdownRenderChild {
   private rendering: Promise<void> | null = null;
   private readonly renders = new RenderSequencer();
@@ -69,16 +72,7 @@ export class NotebookEmbed extends MarkdownRenderChild {
     root.classList.add('nbl-embed');
     const settings = this.host.settings;
     try {
-      const [text, highlight] = await Promise.all([
-        this.host.app.vault.cachedRead(this.file),
-        this.host.highlighter(),
-      ]);
-      if (!this.renders.isCurrent(token)) return;
-      const nb = parseNotebook(text);
       const doc = root.ownerDocument;
-      const sub = parseSubpath(this.subpath);
-      const cells = sub ? selectCells(nb, sub) : undefined;
-
       const bar = doc.createElement('div');
       bar.className = 'nbl-embed-bar';
       const open = doc.createElement('a');
@@ -94,6 +88,24 @@ export class NotebookEmbed extends MarkdownRenderChild {
       const body = doc.createElement('div');
       body.className = 'nbl-embed-body';
       body.style.maxHeight = EMBED_MAX_HEIGHT;
+      // An embed draws every cell in the note, so it has a lower cap than search.
+      if (this.file.stat.size > EMBED_MAX_BYTES) {
+        const big = doc.createElement('p');
+        big.className = 'nbl-failure';
+        big.textContent = `Too large to embed (over ${EMBED_MAX_BYTES / 1024 / 1024} MB). Open the notebook to read it.`;
+        body.appendChild(big);
+        root.replaceChildren(bar, body);
+        return;
+      }
+      const [text, highlight] = await Promise.all([
+        this.host.app.vault.cachedRead(this.file),
+        this.host.highlighter(),
+      ]);
+      if (!this.renders.isCurrent(token)) return;
+      const nb = parseNotebook(text);
+      const sub = parseSubpath(this.subpath);
+      const cells = sub ? selectCells(nb, sub) : undefined;
+
       if (sub && !cells) {
         const missing = doc.createElement('p');
         missing.className = 'nbl-failure';

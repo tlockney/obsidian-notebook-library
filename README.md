@@ -82,7 +82,8 @@ nothing, the box says how many were skipped. The index lives in memory and is re
   draw the notebook, the section or the cell inside the note, in a box
   that scrolls past 30 em, with an **Open** link to the full notebook. An
   embed follows the settings and redraws when the file changes. Embeds
-  have no header.
+  have no header. A notebook over 5 MB isn't drawn inside a note (it
+  would stall mobile); the embed says so and keeps the Open link.
 
 Embeds use Obsidian's internal embed registry when this version has one,
 and otherwise a Markdown post-processor that fills the placeholder in

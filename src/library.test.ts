@@ -278,6 +278,34 @@ describe('NotebookLibrary events', () => {
     expect(s.cachedRead).not.toHaveBeenCalled();
   });
 
+  it('drops a read that finishes after stop()', async () => {
+    let finish!: (t: string) => void;
+    const s = setup();
+    await s.library.ready();
+    s.handlers.create(s.add('a.ipynb', new Promise<string>(r => (finish = r))));
+    await flush();
+    s.library.stop();
+    finish(nb('late'));
+    await flush();
+    expect(s.search('late')).toEqual([]);
+    expect(s.library.index.size).toBe(0);
+  });
+
+  it('stops a build in progress: nothing lands and no further file is read', async () => {
+    let finish!: (t: string) => void;
+    const s = setup();
+    s.add('a.ipynb', new Promise<string>(r => (finish = r)));
+    s.add('b.ipynb', nb('beta'));
+    const built = s.library.ready();
+    await flush();
+    s.library.stop();
+    finish(nb('alpha'));
+    await built;
+    await vi.runAllTimersAsync();
+    expect(s.cachedRead).toHaveBeenCalledTimes(1);
+    expect(s.library.index.size).toBe(0);
+  });
+
   it('registers its stop with the plugin', () => {
     const s = setup();
     expect(s.plugin.cleanups).toHaveLength(1);
