@@ -121,9 +121,9 @@ describe('NotebookSettingTab', () => {
 });
 
 describe('NotebookSettingTab when saving fails', () => {
-  const failing = () => {
+  const failing = (overrides = {}) => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const s = setup();
+    const s = setup(overrides);
     s.plugin.saveSettings.mockRejectedValue(new Error('disk full'));
     return { ...s, err };
   };
@@ -159,5 +159,13 @@ describe('NotebookSettingTab when saving fails', () => {
     tab.hide();
     await vi.advanceTimersByTimeAsync(0);
     expect(stub.notices).toEqual(['Notebook Library: could not save settings']);
+  });
+
+  it('reports a failed debounced save of the Custom URL, which saves actions only', async () => {
+    const { row, err, plugin } = failing({ openWith: 'custom' });
+    await row('Custom URL').controls[0].onChange!('myapp://open?f={vaultPath}' as never);
+    await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+    expect(plugin.saveSettings).toHaveBeenCalledWith('actions');
+    reported(err);
   });
 });
