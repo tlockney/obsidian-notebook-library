@@ -149,7 +149,7 @@ use APIs that are not in `obsidian.d.ts` 1.14.4 or behaviour the typings
 do not state:
 
 - `app.embedRegistry.registerExtension('ipynb', (ctx, file, subpath) =>
-  component)` and `unregisterExtension`: the factory's arguments, that
+component)` and `unregisterExtension`: the factory's arguments, that
   `ctx.containerEl` is the element to fill, and that Obsidian calls
   `loadFile()` on the returned component (the embed also renders from
   `onload`, once). Feature-detected; the fallback is a Markdown
@@ -178,12 +178,13 @@ targets don't act on the old file.
 ## 2026-11-16, Open in Ganymede on iPad and iPhone (#8)
 
 The "Ganymede" Open-with choice now also works on iPad and iPhone
-(`Platform.isIosApp`; checked before macOS because an iPad reports
-`isMacOS` too). There is no absolute path there, so the action opens
+(`Platform.isIosApp`; an iPad reports `isMacOS` too, but not
+`isDesktopApp`). There is no absolute path there, so the action opens
 `ganymede://open?folder=<vault name>&file=<vault-relative path>`, both
 values through `encodeURIComponent`. The folder is the vault's name
-(`app.vault.getName()`: the vault folder's name in Obsidian; the typings
-offer nothing better, `CapacitorAdapter` has no base path). macOS desktop
+(`app.vault.getName()`, which Obsidian keeps equal to the vault folder's
+name; `CapacitorAdapter.getFullPath`, 1.7.2+, could give the folder
+itself if that turns out not to hold, #9). macOS desktop
 keeps `path=`, since the Mac app refuses `folder=` links. Android,
 Windows and Linux are unchanged: no Ganymede action. `resolveOpenAction`
 returns which form to use, so the view doesn't re-derive it.
@@ -192,4 +193,5 @@ Needs a Ganymede build with ganymede-ui#640 (PR #642, unreleased) and the
 vault folder granted once in Ganymede. Still assumed, not tried on a
 device: `window.open` with a `ganymede://` URL from Obsidian on iOS (the
 typings have no external-URL opener), and that the vault's name equals the
-granted folder's last path component.
+granted folder's last path component. #9 tracks the iPad check and
+removing the unreleased notes once Ganymede ships #640.

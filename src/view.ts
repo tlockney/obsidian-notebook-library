@@ -182,8 +182,9 @@ export class NotebookView extends FileView {
         // No typed Obsidian API opens an external URL (obsidian.d.ts has none),
         // so window.open it is, as for the custom URL.
         if (action.form === 'folder') {
-          // The vault's name is its folder's name in Obsidian; the typings give
-          // no other source (CapacitorAdapter has no base path, only getName()).
+          // The vault's name, which Obsidian keeps equal to its folder's name.
+          // CapacitorAdapter.getFullPath (1.7.2+) could give the folder itself;
+          // #9 checks whether that is needed.
           window.open(ganymedeFolderUrl(this.app.vault.getName(), file.path));
         } else if (fullPath !== undefined) {
           window.open(ganymedeOpenUrl(fullPath));

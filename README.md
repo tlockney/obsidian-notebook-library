@@ -159,13 +159,13 @@ the notebook re-renders.
 
 ## Settings
 
-| Setting | Default | |
-|---|---|---|
-| Fold code cells by default | on | Code starts folded under its summary. |
-| Show execution counts | on | `[n]` after "Code". |
-| Long output limit | 40 | Lines of text, stream and error output before **Show more**; 0 shows everything. |
-| Search text outputs | on | Include outputs in search. |
-| Open with | Ganymede | See below. |
+| Setting                    | Default  |                                                                                  |
+| -------------------------- | -------- | -------------------------------------------------------------------------------- |
+| Fold code cells by default | on       | Code starts folded under its summary.                                            |
+| Show execution counts      | on       | `[n]` after "Code".                                                              |
+| Long output limit          | 40       | Lines of text, stream and error output before **Show more**; 0 shows everything. |
+| Search text outputs        | on       | Include outputs in search.                                                       |
+| Open with                  | Ganymede | See below.                                                                       |
 
 Changing a setting redraws open notebooks and embeds; text fields save 0.5 s after you stop typing, and the custom URL only updates the header action. Code cells you expanded or collapsed keep that state across a redraw, except when the fold setting itself changed.
 
@@ -173,20 +173,22 @@ Changing a setting redraws open notebooks and embeds; text fields save 0.5 s aft
 
 The header action opens the notebook in another app:
 
+> [!NOTE]
+> **Unreleased in ganymede-ui.** Open in Ganymede on iPad and iPhone needs
+> a Ganymede build that includes
+> [ganymede-ui#640](https://github.com/tlockney/ganymede-ui/issues/640);
+> no release has it yet. Until then the action is offered there but
+> Ganymede doesn't open the notebook.
+
 - **Ganymede** (default): action "Open in Ganymede".
   - macOS desktop: `ganymede://open?path=<absolute path>`, which the Mac app
     handles.
   - iPad and iPhone: `ganymede://open?folder=<vault name>&file=<path in the
-    vault>`. Ganymede must have the vault folder, once: grant it in
+vault>`. Ganymede must have the vault folder, once: grant it in
     Ganymede under Settings › Link Folders, or choose Grant Access… when the
     first link asks. The folder name has to match the vault's name exactly.
     Not offered on Android, Windows or Linux.
 
-  > [!NOTE]
-  > **Unreleased.** Needs a Ganymede build that includes
-  > [ganymede-ui#640](https://github.com/tlockney/ganymede-ui/issues/640);
-  > no release has it yet. Until then the action is offered on iPad and
-  > iPhone but Ganymede doesn't open the notebook.
 - **System default app**: Obsidian's `openWithDefaultApp`, on desktop
   only, and only when this Obsidian has it. Action: "Open in default app".
 - **Custom URL**: a template with `{path}` (absolute path), `{vaultPath}`

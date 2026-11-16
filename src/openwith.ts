@@ -104,7 +104,7 @@ export type OpenAction =
  * The action the header offers, or null for none. Ganymede: macOS desktop,
  * where the Mac app handles ganymede:// and can read the vault (path form);
  * iPad and iPhone, where the app reads a folder the person granted (folder
- * form; checked first because an iPad also reports isMacOS). Never Android,
+ * form; iPad also reports isMacOS, but not isDesktopApp). Never Android,
  * Windows or Linux. System app:
  * desktop with a path and Obsidian's openWithDefaultApp. Custom URL: an
  * invalid template offers nothing; one using {path} needs a desktop path.
