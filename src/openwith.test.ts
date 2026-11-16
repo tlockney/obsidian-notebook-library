@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildCustomUrl,
+  ganymedeFolderUrl,
   ganymedeOpenUrl,
   resolveOpenAction,
   usesAbsolutePath,
@@ -16,6 +17,30 @@ describe('ganymedeOpenUrl', () => {
     expect(ganymedeOpenUrl('/v/ü日本#1?x=1&y.ipynb')).toBe(
       'ganymede://open?path=%2Fv%2F%C3%BC%E6%97%A5%E6%9C%AC%231%3Fx%3D1%26y.ipynb',
     );
+  });
+});
+
+describe('ganymedeFolderUrl', () => {
+  it('encodes spaces, # ? & % and / in both values', () => {
+    expect(ganymedeFolderUrl('My Vault', 'a b/c#1?x=1&y%2.ipynb')).toBe(
+      'ganymede://open?folder=My%20Vault&file=a%20b%2Fc%231%3Fx%3D1%26y%252.ipynb',
+    );
+    expect(ganymedeFolderUrl('a/b#c?d&e%f', 'x.ipynb')).toBe(
+      'ganymede://open?folder=a%2Fb%23c%3Fd%26e%25f&file=x.ipynb',
+    );
+  });
+
+  it('encodes non-ASCII in both values', () => {
+    expect(ganymedeFolderUrl('Zürich 日本', 'Notizen/é.ipynb')).toBe(
+      'ganymede://open?folder=Z%C3%BCrich%20%E6%97%A5%E6%9C%AC&file=Notizen%2F%C3%A9.ipynb',
+    );
+  });
+
+  it('round-trips through URL parsing', () => {
+    const u = new URL(ganymedeFolderUrl('V&1 #x', 'd 1/n?&#%.ipynb'));
+    expect(u.searchParams.get('folder')).toBe('V&1 #x');
+    expect(u.searchParams.get('file')).toBe('d 1/n?&#%.ipynb');
+    expect(u.searchParams.has('path')).toBe(false);
   });
 });
 
@@ -119,6 +144,7 @@ describe('resolveOpenAction', () => {
   const env = (o: Partial<OpenEnv> = {}): OpenEnv => ({
     isMacOS: true,
     isDesktopApp: true,
+    isIosApp: false,
     hasFilePath: true,
     hasOpenWithDefaultApp: true,
     ...o,
@@ -127,16 +153,40 @@ describe('resolveOpenAction', () => {
 
   it.each([
     ['mac desktop', env(), true],
-    [
-      'iPad (isMacOS, not the desktop app)',
-      env({ isDesktopApp: false, hasFilePath: false }),
-      false,
-    ],
-    ['iPhone', env({ isMacOS: false, isDesktopApp: false, hasFilePath: false }), false],
+    ['Android (not iOS, no path)', env({ isMacOS: false, isDesktopApp: false, hasFilePath: false }), false],
+    ['iPad without the iOS flag (isMacOS only)', env({ isDesktopApp: false, hasFilePath: false }), false],
     ['Windows or Linux desktop', env({ isMacOS: false }), false],
     ['no file-system path', env({ hasFilePath: false }), false],
   ])('Ganymede on %s', (_n, e, offered) => {
     expect(resolveOpenAction(ganymede, e)?.label ?? null).toBe(offered ? 'Open in Ganymede' : null);
+  });
+
+  it('offers the path form on macOS desktop and the folder form on iPad and iPhone', () => {
+    expect(resolveOpenAction(ganymede, env())).toEqual({
+      kind: 'ganymede',
+      label: 'Open in Ganymede',
+      form: 'path',
+    });
+    const ios = { isDesktopApp: false, hasFilePath: false, isIosApp: true };
+    // iPad reports isMacOS; iPhone does not. Both get the folder form.
+    for (const isMacOS of [true, false]) {
+      expect(resolveOpenAction(ganymede, env({ ...ios, isMacOS }))).toEqual({
+        kind: 'ganymede',
+        label: 'Open in Ganymede',
+        form: 'folder',
+      });
+    }
+  });
+
+  it('leaves the other settings unchanged on iOS', () => {
+    const ios = env({ isDesktopApp: false, hasFilePath: false, isIosApp: true });
+    expect(resolveOpenAction({ openWith: 'system', customUrl: '' }, ios)).toBeNull();
+    expect(resolveOpenAction({ openWith: 'off', customUrl: '' }, ios)).toBeNull();
+    expect(resolveOpenAction({ openWith: 'custom', customUrl: 'myapp://{path}' }, ios)).toBeNull();
+    expect(resolveOpenAction({ openWith: 'custom', customUrl: 'myapp://{name}' }, ios)).toEqual({
+      kind: 'custom',
+      label: 'Open externally',
+    });
   });
 
   it('offers the system app on any desktop with a path and openWithDefaultApp', () => {
