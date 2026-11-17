@@ -212,6 +212,83 @@ describe('renderSafeMarkdown', () => {
       expect(el.querySelector('pre code')!.textContent).toBe('$x_1$ $$y$$\n');
     });
 
+    it('math is not taken from indented code', () => {
+      const el = md('text\n\n    $x_1$ and $$y$$\n    $z*w*$\n\nafter $a*b*c$');
+      expect(el.querySelector('pre code')!.textContent).toBe('$x_1$ and $$y$$\n$z*w*$\n');
+      const spans = el.querySelectorAll('.nbl-math');
+      expect(spans).toHaveLength(1);
+      expect(spans[0].textContent).toBe('$a*b*c$');
+      expect(md('\t$q_1$').querySelectorAll('.nbl-math')).toHaveLength(0);
+      expect(md('\t$q_1$').querySelector('pre code')!.textContent).toBe('$q_1$\n');
+    });
+
+    it('indented code after a heading or after mixed indents is code', () => {
+      const h = md('# H\n    $a*b*$');
+      expect(h.querySelector('pre code')!.textContent).toBe('$a*b*$\n');
+      expect(h.querySelectorAll('.nbl-math')).toHaveLength(0);
+      const t = md('  \t$a_1$');
+      expect(t.querySelector('pre code')!.textContent).toContain('$a_1$');
+      expect(t.querySelectorAll('.nbl-math')).toHaveLength(0);
+    });
+
+    it('math in a loose list item continuation stays math', () => {
+      const el = md('1. step\n\n    where $a*b*c$ holds\n');
+      expect(el.querySelector('pre')).toBeNull();
+      expect(el.querySelector('em')).toBeNull();
+      expect(el.querySelector('.nbl-math')!.textContent).toBe('$a*b*c$');
+    });
+
+    it('an indented line in a paragraph is not code, so its math stays math', () => {
+      const el = md('para\n    $a*b*c$ still the paragraph');
+      expect(el.querySelector('pre')).toBeNull();
+      expect(el.querySelector('.nbl-math')!.textContent).toBe('$a*b*c$');
+    });
+
+    it('literal text with the old marker is not mangled', () => {
+      const el = md('zzgnbmath0zz then $a*b*c$ and zzgnbmath1zz');
+      expect(el.textContent?.trim()).toBe('zzgnbmath0zz then $a*b*c$ and zzgnbmath1zz');
+      expect(el.querySelectorAll('.nbl-math')).toHaveLength(1);
+    });
+
+    it('literal private-use characters are kept and cannot forge a placeholder', () => {
+      const src = '0 and  then $a*b*c$ 0';
+      const el = md(src);
+      expect(el.textContent?.trim()).toBe(src);
+      const spans = el.querySelectorAll('.nbl-math');
+      expect(spans).toHaveLength(1);
+      expect(spans[0].textContent).toBe('$a*b*c$');
+    });
+
+    it.each(['&#xE000;', '&#57344;', '&#XE000;'])(
+      'numeric reference %s cannot forge a placeholder',
+      ref => {
+        const el = md(`${ref}0${ref} $a*b*c$`);
+        expect(el.querySelectorAll('.nbl-math')).toHaveLength(1);
+        expect(el.textContent?.trim()).toBe('0 $a*b*c$');
+      },
+    );
+
+    it('math is not taken from raw HTML pre', () => {
+      const el = md('<pre>\n$a*b*c$\n</pre>');
+      expect(el.querySelectorAll('.nbl-math')).toHaveLength(0);
+      expect(el.querySelector('pre')!.textContent).toContain('$a*b*c$');
+    });
+
+    it('math in image alt and link title is restored as source', () => {
+      const img = md('![a $x_1$ b](data:image/png;base64,iVBORw0KGgo=)').querySelector('img')!;
+      expect(img.getAttribute('alt')).toBe('a $x_1$ b');
+      const a = md('[t](https://x "a $x_1$ b")').querySelector('a')!;
+      expect(a.getAttribute('title')).toBe('a $x_1$ b');
+    });
+
+    it('with every private-use character in the text, math is left as is', () => {
+      let all = '';
+      for (let c = 0xe000; c <= 0xf8ff; c++) all += String.fromCharCode(c);
+      const el = md(`${all} $a*b*c$`);
+      expect(el.querySelectorAll('.nbl-math')).toHaveLength(0);
+      expect(el.textContent).toContain(all);
+    });
+
     it('the math span is text, never markup', () => {
       const el = md('$<b>x</b>$');
       expect(el.querySelector('b')).toBeNull();
