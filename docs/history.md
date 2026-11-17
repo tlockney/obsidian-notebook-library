@@ -195,3 +195,18 @@ device: `window.open` with a `ganymede://` URL from Obsidian on iOS (the
 typings have no external-URL opener), and that the vault's name equals the
 granted folder's last path component. #9 tracks the iPad check and
 removing the unreleased notes once Ganymede ships #640.
+
+## 2026-11-17, Math placeholder and indented code (#3)
+
+`src/markdown.ts` hid math behind the text `zzgnbmath<N>zz`, so notebook
+text containing that string was rewritten. The placeholder is now
+`<D><N><D>`, where D is one private-use character (U+E000 up) chosen to be
+absent from the cell's text. marked never produces such characters, so no
+input can collide with it, and nothing is stripped or escaped (literal
+U+E000 text survives). If all 6400 private-use characters appear in one
+cell, math is left unprotected instead.
+
+Indented code blocks (4 spaces or a tab, at the start or after a blank
+line) are now skipped like fenced code, so `$` in them is not math. Kept
+simple: an indented line continuing a list item after a blank line also
+counts as code, which only means its `$` isn't kept as math.

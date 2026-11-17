@@ -172,24 +172,43 @@ function copyElement(src: Element, dest: Node, doc: Document, att: Attachments):
   copyChildren(src, out, doc, att);
 }
 
-// Code that math must not be taken from: fenced blocks, then inline spans.
+// Code that math must not be taken from: fenced blocks, indented blocks, then
+// inline spans. An indented block is a run of lines starting with 4 spaces or
+// a tab, at the start of the text or after a blank line (it can't interrupt a
+// paragraph, per CommonMark), with blank lines allowed inside the run. Kept
+// simple on purpose: an indented line that continues a list item after a blank
+// line also counts as code here, so `$` in it isn't kept as math. That is
+// cosmetic, and the same as before this was handled at all.
 const CODE =
-  /^(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:\n\1[`~]*[ \t]*(?=\n|$)|$)|(`+)(?!`)[\s\S]*?[^`]\2(?!`)/gm;
+  /^(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:\n\1[`~]*[ \t]*(?=\n|$)|$)|(?:(?<![\s\S])|(?<=\n[ \t]*\n))(?: {4}|\t)[^\n]*(?:\n(?:(?: {4}|\t)[^\n]*|[ \t]*(?=\n)))*|(`+)(?!`)[\s\S]*?[^`]\2(?!`)/gm;
 const DISPLAY_MATH = /\$\$[\s\S]+?\$\$/g;
 // `$…$` on one line: not `\$`, no space just inside either `$`, and not
 // followed by a digit (so "$5 and $6" is prices, not math).
 const INLINE_MATH = /(?<![\\$])\$(?![\s$])(?:[^$\n\\]|\\.)+?(?<![\s\\])\$(?![\d$])/g;
-const MARK = 'zzgnbmath';
-const MARKED_SPAN = new RegExp(`${MARK}(\\d+)zz`, 'g');
+
+// A placeholder is `<D><index><D>` where D is a single private-use character
+// (U+E000 to U+F8FF) that does not occur anywhere in the input. marked never
+// invents such characters, so no text, whatever it contains (including the old
+// `zzgnbmath` marker or private-use characters), can be mistaken for a
+// placeholder. Nothing is stripped or escaped, so literal text is untouched.
+function pickDelimiter(markdown: string): string | null {
+  for (let c = 0xe000; c <= 0xf8ff; c++) {
+    const ch = String.fromCharCode(c);
+    if (!markdown.includes(ch)) return ch;
+  }
+  return null; // All 6400 are used: leave math unprotected rather than risk a clash.
+}
 
 /**
  * Replace math spans with placeholders so marked doesn't read `*`, `_` or
  * `\\` in them as Markdown. The spans come back as literal source (not
  * typeset).
  */
-function protectMath(markdown: string): { text: string; spans: string[] } {
+function protectMath(markdown: string): { text: string; spans: string[]; delim: string } {
   const spans: string[] = [];
-  const hide = (m: string) => `${MARK}${spans.push(m) - 1}zz`;
+  const delim = pickDelimiter(markdown);
+  if (delim === null) return { text: markdown, spans, delim: '' };
+  const hide = (m: string) => `${delim}${spans.push(m) - 1}${delim}`;
   let text = '';
   let last = 0;
   for (const m of markdown.matchAll(CODE)) {
@@ -197,7 +216,7 @@ function protectMath(markdown: string): { text: string; spans: string[] } {
     last = m.index + m[0].length;
   }
   text += mathOutside(markdown.slice(last), hide);
-  return { text, spans };
+  return { text, spans, delim };
 }
 
 function mathOutside(text: string, hide: (m: string) => string): string {
@@ -205,17 +224,17 @@ function mathOutside(text: string, hide: (m: string) => string): string {
 }
 
 /** Turn placeholders in text nodes back into `span.nbl-math`. */
-function restoreMath(root: HTMLElement, spans: string[]): void {
+function restoreMath(root: HTMLElement, spans: string[], delim: string): void {
   if (!spans.length) return;
+  const marked = new RegExp(`${delim}(\\d+)${delim}`, 'g');
   const doc = root.ownerDocument;
   const walker = doc.createTreeWalker(root, 4 /* NodeFilter.SHOW_TEXT */);
   const nodes: Text[] = [];
   for (let n = walker.nextNode(); n; n = walker.nextNode()) {
-    if (MARKED_SPAN.test(n.nodeValue ?? '')) nodes.push(n as Text);
-    MARKED_SPAN.lastIndex = 0;
+    if (new RegExp(`${delim}\\d+${delim}`).test(n.nodeValue ?? '')) nodes.push(n as Text);
   }
   for (const node of nodes) {
-    const parts = (node.nodeValue ?? '').split(MARKED_SPAN);
+    const parts = (node.nodeValue ?? '').split(marked);
     const frag = doc.createDocumentFragment();
     parts.forEach((part, i) => {
       if (i % 2 === 0) {
@@ -241,13 +260,13 @@ export function renderSafeMarkdown(
   el: HTMLElement,
   attachments: Attachments = {},
 ): void {
-  const { text, spans } = protectMath(markdown);
+  const { text, spans, delim } = protectMath(markdown);
   const html = marked.parse(text, { gfm: true, async: false }) as string;
   const parsed = new DOMParser().parseFromString(html, 'text/html');
   const doc = el.ownerDocument;
   const wrap = doc.createElement('div');
   wrap.className = 'markdown-rendered nbl-markdown';
   copyChildren(parsed.body, wrap, doc, attachments);
-  restoreMath(wrap, spans);
+  restoreMath(wrap, spans, delim);
   el.appendChild(wrap);
 }

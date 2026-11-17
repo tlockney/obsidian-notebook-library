@@ -212,6 +212,40 @@ describe('renderSafeMarkdown', () => {
       expect(el.querySelector('pre code')!.textContent).toBe('$x_1$ $$y$$\n');
     });
 
+    it('math is not taken from indented code', () => {
+      const el = md('text\n\n    $x_1$ and $$y$$\n    $z*w*$\n\nafter $a*b*c$');
+      expect(el.querySelector('pre code')!.textContent).toBe('$x_1$ and $$y$$\n$z*w*$\n');
+      const spans = el.querySelectorAll('.nbl-math');
+      expect(spans).toHaveLength(1);
+      expect(spans[0].textContent).toBe('$a*b*c$');
+      expect(md('\t$q_1$').querySelectorAll('.nbl-math')).toHaveLength(0);
+    });
+
+    it('an indented line in a paragraph is not code, so its math stays math', () => {
+      const el = md('para\n    $a*b*c$ still the paragraph');
+      expect(el.querySelector('pre')).toBeNull();
+      expect(el.querySelector('.nbl-math')!.textContent).toBe('$a*b*c$');
+    });
+
+    it('literal text with the old marker is not mangled', () => {
+      const el = md('zzgnbmath0zz then $a*b*c$ and zzgnbmath1zz');
+      expect(el.textContent?.trim()).toBe('zzgnbmath0zz then $a*b*c$ and zzgnbmath1zz');
+      expect(el.querySelectorAll('.nbl-math')).toHaveLength(1);
+    });
+
+    it('literal private-use characters are kept and cannot forge a placeholder', () => {
+      const src = '0 and  then $a*b*c$ 0';
+      const el = md(src);
+      expect(el.textContent?.trim()).toBe(src);
+      const spans = el.querySelectorAll('.nbl-math');
+      expect(spans).toHaveLength(1);
+      expect(spans[0].textContent).toBe('$a*b*c$');
+    });
+
+    it('private-use characters work with no math at all', () => {
+      expect(md(' 0 ').textContent?.trim()).toBe(' 0 ');
+    });
+
     it('the math span is text, never markup', () => {
       const el = md('$<b>x</b>$');
       expect(el.querySelector('b')).toBeNull();
