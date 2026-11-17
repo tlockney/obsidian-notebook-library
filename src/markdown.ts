@@ -172,15 +172,13 @@ function copyElement(src: Element, dest: Node, doc: Document, att: Attachments):
   copyChildren(src, out, doc, att);
 }
 
-// Code that math must not be taken from: fenced blocks, indented blocks, then
-// inline spans. An indented block is a run of lines starting with 4 spaces or
-// a tab, at the start of the text or after a blank line (it can't interrupt a
-// paragraph, per CommonMark), with blank lines allowed inside the run. Kept
-// simple on purpose: an indented line that continues a list item after a blank
-// line also counts as code here, so `$` in it isn't kept as math. That is
-// cosmetic, and the same as before this was handled at all.
+// Code that math must not be taken from, found before marked runs: fenced
+// blocks, then inline spans. Indented code is not matched here, because
+// whether an indented line is code depends on context (a loose list item's
+// continuation paragraph is not). marked decides, and restoreMath puts math
+// that landed inside code or pre back as plain text.
 const CODE =
-  /^(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:\n\1[`~]*[ \t]*(?=\n|$)|$)|(?:(?<![\s\S])|(?<=\n[ \t]*\n))(?: {4}|\t)[^\n]*(?:\n(?:(?: {4}|\t)[^\n]*|[ \t]*(?=\n)))*|(`+)(?!`)[\s\S]*?[^`]\2(?!`)/gm;
+  /^(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:\n\1[`~]*[ \t]*(?=\n|$)|$)|(`+)(?!`)[\s\S]*?[^`]\2(?!`)/gm;
 const DISPLAY_MATH = /\$\$[\s\S]+?\$\$/g;
 // `$…$` on one line: not `\$`, no space just inside either `$`, and not
 // followed by a digit (so "$5 and $6" is prices, not math).
@@ -190,11 +188,17 @@ const INLINE_MATH = /(?<![\\$])\$(?![\s$])(?:[^$\n\\]|\\.)+?(?<![\s\\])\$(?![\d$
 // (U+E000 to U+F8FF) that does not occur anywhere in the input. marked never
 // invents such characters, so no text, whatever it contains (including the old
 // `zzgnbmath` marker or private-use characters), can be mistaken for a
-// placeholder. Nothing is stripped or escaped, so literal text is untouched.
+// placeholder. Characters written as numeric references (`&#xE000;`) count as
+// present too, since the parser turns them into the character. Nothing is
+// stripped or escaped, so literal text is untouched.
 function pickDelimiter(markdown: string): string | null {
+  const used = new Set<number>();
+  for (const m of markdown.matchAll(/&#(?:[xX]([0-9a-fA-F]+)|(\d+));/g)) {
+    used.add(m[1] !== undefined ? parseInt(m[1], 16) : parseInt(m[2], 10));
+  }
   for (let c = 0xe000; c <= 0xf8ff; c++) {
     const ch = String.fromCharCode(c);
-    if (!markdown.includes(ch)) return ch;
+    if (!used.has(c) && !markdown.includes(ch)) return ch;
   }
   return null; // All 6400 are used: leave math unprotected rather than risk a clash.
 }
@@ -223,7 +227,11 @@ function mathOutside(text: string, hide: (m: string) => string): string {
   return text.replace(DISPLAY_MATH, hide).replace(INLINE_MATH, hide);
 }
 
-/** Turn placeholders in text nodes back into `span.nbl-math`. */
+/**
+ * Turn placeholders in text nodes back into `span.nbl-math`. Inside code or
+ * pre (indented code, which marked recognizes, or a span marked kept as code)
+ * the original text is restored as plain text instead.
+ */
 function restoreMath(root: HTMLElement, spans: string[], delim: string): void {
   if (!spans.length) return;
   const marked = new RegExp(`${delim}(\\d+)${delim}`, 'g');
@@ -236,10 +244,15 @@ function restoreMath(root: HTMLElement, spans: string[], delim: string): void {
   for (const node of nodes) {
     const parts = (node.nodeValue ?? '').split(marked);
     const frag = doc.createDocumentFragment();
+    const inCode = node.parentElement?.closest('code, pre') != null;
     parts.forEach((part, i) => {
       if (i % 2 === 0) {
         if (part) frag.appendChild(doc.createTextNode(part));
       } else if (spans[Number(part)] !== undefined) {
+        if (inCode) {
+          frag.appendChild(doc.createTextNode(spans[Number(part)]));
+          return;
+        }
         const span = doc.createElement('span');
         span.className = 'nbl-math';
         span.textContent = spans[Number(part)];

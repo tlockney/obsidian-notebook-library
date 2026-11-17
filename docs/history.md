@@ -201,12 +201,14 @@ removing the unreleased notes once Ganymede ships #640.
 `src/markdown.ts` hid math behind the text `zzgnbmath<N>zz`, so notebook
 text containing that string was rewritten. The placeholder is now
 `<D><N><D>`, where D is one private-use character (U+E000 up) chosen to be
-absent from the cell's text. marked never produces such characters, so no
+absent from the cell's text (as a character or a numeric reference). marked never produces such characters, so no
 input can collide with it, and nothing is stripped or escaped (literal
 U+E000 text survives). If all 6400 private-use characters appear in one
 cell, math is left unprotected instead.
 
-Indented code blocks (4 spaces or a tab, at the start or after a blank
-line) are now skipped like fenced code, so `$` in them is not math. Kept
-simple: an indented line continuing a list item after a blank line also
-counts as code, which only means its `$` isn't kept as math.
+Math is not wrapped inside code. Fenced and inline code are found before
+marked runs. Indented code is left to marked, since whether an indented
+line is code depends on context (a loose list item's continuation paragraph
+is not): math placeholders that end up inside `code` or `pre` are restored as
+plain text. Characters written as numeric references (`&#xE000;`) are
+excluded when choosing the delimiter, so they can't forge a placeholder.
