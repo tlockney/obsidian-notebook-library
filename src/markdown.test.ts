@@ -259,10 +259,26 @@ describe('renderSafeMarkdown', () => {
       expect(spans[0].textContent).toBe('$a*b*c$');
     });
 
-    it('numeric character references cannot forge a placeholder', () => {
-      const el = md('&#xE000;0&#xE000; then $a*b*c$ and &#57344;0&#57344;');
-      expect(el.querySelectorAll('.nbl-math')).toHaveLength(1);
-      expect(el.textContent?.trim()).toBe('0 then $a*b*c$ and 0');
+    it.each(['&#xE000;', '&#57344;', '&#XE000;'])(
+      'numeric reference %s cannot forge a placeholder',
+      ref => {
+        const el = md(`${ref}0${ref} $a*b*c$`);
+        expect(el.querySelectorAll('.nbl-math')).toHaveLength(1);
+        expect(el.textContent?.trim()).toBe('0 $a*b*c$');
+      },
+    );
+
+    it('math is not taken from raw HTML pre', () => {
+      const el = md('<pre>\n$a*b*c$\n</pre>');
+      expect(el.querySelectorAll('.nbl-math')).toHaveLength(0);
+      expect(el.querySelector('pre')!.textContent).toContain('$a*b*c$');
+    });
+
+    it('math in image alt and link title is restored as source', () => {
+      const img = md('![a $x_1$ b](data:image/png;base64,iVBORw0KGgo=)').querySelector('img')!;
+      expect(img.getAttribute('alt')).toBe('a $x_1$ b');
+      const a = md('[t](https://x "a $x_1$ b")').querySelector('a')!;
+      expect(a.getAttribute('title')).toBe('a $x_1$ b');
     });
 
     it('with every private-use character in the text, math is left as is', () => {

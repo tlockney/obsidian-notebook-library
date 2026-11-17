@@ -196,9 +196,12 @@ function pickDelimiter(markdown: string): string | null {
   for (const m of markdown.matchAll(/&#(?:[xX]([0-9a-fA-F]+)|(\d+));/g)) {
     used.add(m[1] !== undefined ? parseInt(m[1], 16) : parseInt(m[2], 10));
   }
+  for (const ch of markdown) {
+    const c = ch.charCodeAt(0);
+    if (c >= 0xe000 && c <= 0xf8ff) used.add(c);
+  }
   for (let c = 0xe000; c <= 0xf8ff; c++) {
-    const ch = String.fromCharCode(c);
-    if (!used.has(c) && !markdown.includes(ch)) return ch;
+    if (!used.has(c)) return String.fromCharCode(c);
   }
   return null; // All 6400 are used: leave math unprotected rather than risk a clash.
 }
@@ -235,6 +238,16 @@ function mathOutside(text: string, hide: (m: string) => string): string {
 function restoreMath(root: HTMLElement, spans: string[], delim: string): void {
   if (!spans.length) return;
   const marked = new RegExp(`${delim}(\\d+)${delim}`, 'g');
+  // Attributes that carry text (image alt, link title) get the original source.
+  const whole = new RegExp(`${delim}(\\d+)${delim}`, 'g');
+  for (const el of Array.from(root.querySelectorAll('[alt], [title]'))) {
+    for (const name of ['alt', 'title']) {
+      const v = el.getAttribute(name);
+      if (v !== null && v.includes(delim)) {
+        el.setAttribute(name, v.replace(whole, (m, i: string) => spans[Number(i)] ?? m));
+      }
+    }
+  }
   const doc = root.ownerDocument;
   const walker = doc.createTreeWalker(root, 4 /* NodeFilter.SHOW_TEXT */);
   const nodes: Text[] = [];
